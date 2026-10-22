@@ -1537,6 +1537,7 @@
 			let tiles = []
 			let uiimgs = {} // not just ui anymore but I do not care in the slightest
 			let loadList = []
+			let ul = true
 			cols.forEach((e,ee) => {
 				units[ee] = []
 				unitnames.forEach((r) => {
@@ -1555,7 +1556,7 @@
 				//sounds[e].onload = imageLoaded
 				sounds[e].addEventListener('canplaythrough', () => {
 					loadList.splice(loadList.indexOf("sound: "+e),1)
-					loadlist.innerHTML = loadList.reduce((a,b) => a+b+"<br>","")
+					if (ul) loadlist.innerHTML = loadList.reduce((a,b) => a+b+"<br>","")
 				})
 				sounds[e].addEventListener("error", (r) => {
 					console.log(e+".mp3 had an error ("+audioErrors[r.currentTarget.error.code-1]+")")
@@ -1585,6 +1586,7 @@
 				if (loadedc == maxload) imagesLoaded()
 			}
 			function imagesLoaded() {
+				ul = false
 				loadBarDiv.remove()
 				tmap = new Image()
 				allDone()
