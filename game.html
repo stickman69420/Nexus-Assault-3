@@ -650,12 +650,12 @@
 								if (mapData.name == "\"Lake\"" && sel.type == 2 && !skunlock.includes(3)) {
 									if (sl.x > sel.x) {
 										if (sl.x == 99) {
-											sounds["ominous-worse"].cloneNode().play()
+											sounds["ominous-worse"].cloneNode().play().catch(() => {alert("Failed to play sound ominous-worse")})
 											skunlock[0].push(4)
 											localStorage.setItem("p1Skins",JSON.stringify(skunlock[0]))
-										} else if (sl.x >= 90) sounds["ominous-hell-super"].cloneNode().play()
-										else if (sl.x >= 70) sounds["ominous-hell"].cloneNode().play()
-										else if (sl.x >= 50) sounds["ominous"].cloneNode().play()
+										} else if (sl.x >= 90) sounds["ominous-hell-super"].cloneNode().play().catch(() => {alert("Failed to play sound ominous-worse")})
+										else if (sl.x >= 70) sounds["ominous-hell"].cloneNode().play().catch(() => {alert("Failed to play sound ominous-worse")})
+										else if (sl.x >= 50) sounds["ominous"].cloneNode().play().catch(() => {alert("Failed to play sound ominous-worse")})
 									}
 								}
 								sel.ox = sel.x
