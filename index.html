@@ -1,0 +1,126 @@
+<!doctype HTML>
+<html>
+	<head>
+		<script>
+			addEventListener("error", (e) => {
+				alert(e.lineno+":"+e.colno+", "+e.message+"\nMain")
+			});
+		</script>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+		<style id="allCss">
+			body {
+				padding: 0px;
+				margin: 0px;
+				width: 100%;
+				height: 100%;
+				overflow: hidden;
+				font-family: Arial;
+			}
+			canvas {
+				overflow: hidden;
+				image-rendering: pixelated;
+				border: black thin solid;
+				display: inline
+			}
+			img {
+				rendering: pixelated;
+				width: 33%;
+			}
+			svg {
+				position: absolute;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%, -100%);
+				height: 5vw;
+			}
+		</style>
+	<body id="body" style="width:100%;height:100vh;">
+		<a href="./game.html">Play online</a><br>
+		<a href="./game.html?offline=true">Play offline</a><br>
+		<a href="./mapSelect.html">Map select</a><br>
+		<a href="./mapMaker.html">Map maker</a><br>
+		<button style="display:block;" onclick="getFile.click()">Upload map</button>
+		<input id="getFile" type="file" style="display:none;" accept=".json">
+		Better home page coming soon maybe<br>
+		<e id="ws"></e>
+		<div style="background-color:#DDD" id="skinsel"></div>
+		<div id="ach"></div>
+		<script src="./definitions.js"></script>
+		<script>
+			if ('audioSession' in navigator) navigator.audioSession.type = 'ambient';
+			ws.innerHTML = "Winstreak: "+(localStorage.getItem("ws") ?? 0)
+			const tc = document.createElement("canvas")
+			tc.width = unitnames.length*32
+			tc.height = 32
+			const ct = tc.getContext("2d")
+			ct.webkitImageSmoothingEnabled = false
+			ct.mozImageSmoothingEnabled = false
+			ct.imageSmoothingEnabled = false
+			let images = []
+			cols.forEach((t) => {
+				skins.forEach((e,ee) => {
+					//ct.clearRect(0,0,tc.width,tc.height)
+					unitnames.forEach((r,rr) => {
+						const img = new Image()
+						img.src = "./images/"+t+e+"/"+r.toLowerCase()+".png"
+						images.push(img)
+						/*ps.push(new Promise((resolve,reject) => {
+							img.onload = function() {
+								ct.drawImage(img,32*rr,0,32,32);
+								resolve();
+							};
+							img.onerror = function(e) {
+								alert(img.src+": "+e.message);
+								reject()
+							}
+						}))*/
+					})
+					//await Promise.all(ps)
+					//skinsel.insertAdjacentHTML("beforeend","<img src='"+tc.toDataURL()+"' />"+(ee == skins.length-1 ? "<br>" : ""))
+				})
+			})
+			async function draw() {
+				try {
+					await Promise.all(images.map((i) => new Promise((resolve, reject) => {i.onload = resolve;i.onerror = reject})))
+					images.forEach((e,ee) => {
+						const skinn = Math.floor(ee/(unitnames.length))%skins.length
+						const pskin = (ee >= unitnames.length*skins.length)
+						const unlocked = skunlock[+pskin].includes(skinn)
+						if (ee%unitnames.length == 0) ct.clearRect(0,0,tc.width,tc.height);
+						ct.drawImage(e,32*(ee%unitnames.length),0,32,32);
+						if ((ee+1)%unitnames.length == 0) skinsel.insertAdjacentHTML("beforeend","<div style='position:relative;display:inline;width:33%;'><img "+(unlocked ? "onclick='cskin("+(+pskin)+","+skinn+")'" : "")+" style='border:thin solid "+((skin[+pskin] == skinn) ? (pskin ? "blue" : "red") : "black")+";opacity:"+(unlocked ? 1 : 0.5)+";' src='"+tc.toDataURL()+"' />"+(unlocked ? "" : '<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0a4 4 0 0 1 4 4v2.05a2.5 2.5 0 0 1 2 2.45v5a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 2 13.5v-5a2.5 2.5 0 0 1 2-2.45V4a4 4 0 0 1 4-4M4.5 7A1.5 1.5 0 0 0 3 8.5v5A1.5 1.5 0 0 0 4.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-5A1.5 1.5 0 0 0 11.5 7zM8 1a3 3 0 0 0-3 3v2h6V4a3 3 0 0 0-3-3"/></svg></div>')+((ee+1)%(unitnames.length*skins.length) == 0 ? "<br>" : ""))
+					})
+				} catch (err) {
+					alert(err.line+": "+err.message)
+				}
+			}
+			
+			const achs = ["Win your first online match","Lose your first online match","Play a match with a custom map","Get a winstreak of 2","Destroy 10 units","Destroy 20 units","<button id='omibut' onclick='ominous.cloneNode().play()'>&nbsp;</button>","Put them where they belong"]
+			const ominous = new Audio("./sounds/ominous.mp3")
+			let acac = ["",""]
+			achs.forEach((e,ee) => {
+				acac[ee%2] += "<e style='color:"+(skunlock[ee%2].includes(Math.floor(ee/2)+1) ? "#0D0" : "black")+"'>"+e+"</e><br>"
+			})
+			ach.insertAdjacentHTML("beforeend",acac[0]+acac[1])
+			omibut.style.backgroundColor = skunlock[0].includes(4) ? "#0D0" : "black"
+			
+			function cskin(p,n) {
+				localStorage.setItem("p"+(p+1)+"Skin",n)
+				location.reload()
+			}
+			
+			draw()
+			getFile.addEventListener("change",async function(e) {
+				const file = e.target.files[0]
+				localStorage.setItem("map"+file.name,JSON.stringify(JSON.parse(await file.text())))
+				let maps = JSON.parse(localStorage.getItem("maps")) ?? []
+				if (!maps.includes(file.name)) {
+					maps.push(file.name)
+					localStorage.setItem("maps",JSON.stringify(maps))
+				}
+				e.target.value = ""
+			})
+		</script>
+	</body>
+</html>

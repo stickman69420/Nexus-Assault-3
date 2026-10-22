@@ -1,0 +1,216 @@
+<!doctype HTML>
+<html>
+	<head>
+		<script>
+			addEventListener("error", (e) => {
+				alert(e.lineno+":"+e.colno+", "+e.message+"\nMain")
+			});
+		</script>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+		<style id="allCss">
+			body {
+				padding: 0px;
+				margin: 0px;
+				width: 100%;
+				height: 100%;
+				overflow: hidden;
+				font-family: Arial;
+			}
+			canvas {
+				-webkit-user-select: none;
+				-moz-user-select: none;
+				-ms-user-select: none;
+				user-select: none;
+				-webkit-user-drag: none;
+				touch-action: none;
+				overflow: hidden;
+				image-rendering: pixelated;
+				border: black thin solid;
+				display: inline
+			}
+			iframe {
+				display: block;
+				border: none;
+			}
+		</style>
+	</head>
+	<body id="body" style="width:100%;height:100vh;">
+		<canvas style="margin:auto;" id='canvas' width='1920' height='1080'></canvas>
+		<p id="out"></p>
+		<script src="./definitions.js"></script>
+		<script>
+			ctx = canvas.getContext("2d")
+			ctx.webkitImageSmoothingEnabled = false
+			ctx.mozImageSmoothingEnabled = false
+			ctx.imageSmoothingEnabled = false
+			ctx.textAlign = "center"
+			ctx.textBaseline = "top"
+			ctx.font = "25px arial"
+			function loadTileMap(data) {
+				const map = data.map
+				const tc = document.createElement("canvas")
+				tc.width = map[0].length*32
+				tc.height = map.length*32
+				const ct = tc.getContext("2d")
+				map	.forEach((e,ee) => {
+					e.forEach((r,rr) => {
+						if (r >= 0) ct.drawImage(tiles[r],rr*32,ee*32)
+						else ct.drawImage(tiles[weightedRand(data.rand[-1-r])],rr*32,ee*32)
+					})
+				})
+				const out = tc.toDataURL()
+				tc.remove()
+				return out
+			}
+			async function loadJSON(url,func) {
+				let args = []
+				try {
+					for (let i = 0; i < arguments.length; ++i) args[i] = arguments[i]
+					args.splice(0,2)
+					const request = new Request(url);
+					const response = await fetch(request);
+					const done = await response.json()
+					func(done,...args)
+					return(done)
+				} catch (err) {
+					alert(err)
+				}
+			}
+			const extra = ["redArrow","blueArrow","x"]
+			let images = []
+			let uiimgs = []
+			let tiles = []
+			let promises = []
+			let loadedMaps = []
+			let names = []
+			let maps = JSON.parse(localStorage.getItem("maps")) ?? []
+			let page = 0
+			let paget = 0
+			let del = false
+			tilenames.forEach((e,ee) => {
+				tiles[ee] = new Image()
+				tiles[ee].src = "./images/tiles/"+e+".png"
+				promises.push(new Promise((resolve,reject) => {
+					tiles[ee].onload = function() {
+						resolve()
+					};
+					tiles[ee].onerror = function() {
+						reject()
+					}
+				}))
+			})
+			extra.forEach((e,ee) => {
+				uiimgs[ee] = new Image()
+				uiimgs[ee].src = "./images/ui/"+e+".png"
+				promises.push(new Promise((resolve,reject) => {
+					uiimgs[ee].onload = function() {
+						resolve()
+					};
+					uiimgs[ee].onerror = function() {
+						reject()
+					}
+				}))
+			})
+			Promise.all(promises).then(() => {
+				promises = []
+				maps.forEach((e) => {
+					loadedMaps.push(JSON.parse(localStorage.getItem("map"+e)))
+				})
+				for (let i=0;i<mapc;i++) {
+					loadJSON("./tilemaps/tilemap"+i+".json",(data,ee) => {
+						images[ee] = new Image()
+						images[ee].src = loadTileMap(data)
+						names[ee] = (data.name)
+						promises.push(new Promise((resolve,reject) => {
+							images[ee].onload = function() {
+								resolve()
+							};
+							images[ee].onerror = function() {
+								reject()
+							}
+						}))
+					},i)
+				}
+				loadedMaps.forEach((e,ee) => {
+					images[mapc+ee] = new Image()
+					images[mapc+ee].src = loadTileMap(e)
+					names[mapc+ee] = (e.name)
+					promises.push(new Promise((resolve,reject) => {
+						images[mapc+ee].onload = function() {
+							resolve()
+						};
+						images[mapc+ee].onerror = function() {
+							reject()
+						}
+					}))
+				})
+				Promise.all(promises).then(() => {
+					try {
+						canvas.addEventListener("click",function(e) {
+							const loc = [e.offsetX*canvas.width/canvas.offsetWidth,e.offsetY*canvas.height/canvas.offsetHeight]
+							if (loc[0] > 1820) {
+								if (loc[1] < 250) paget++
+								if (loc[1] > 830) paget--
+								if (Math.abs(loc[1]-540) <= 50) del = !del
+							} else {
+								const ind = Math.floor(loc[0]/1820*3)+3*Math.floor(loc[1]/1080*3-paget)
+								if (ind < mapc+loadedMaps.length) {
+									if (del) {
+										if (ind >= mapc) {
+											localStorage.removeItem("map"+maps[ind-mapc])
+											maps.splice(ind-mapc,1)
+											localStorage.setItem("maps",JSON.stringify(maps))
+											location.reload()
+										} else {
+											alert("You can't delete default maps")
+										}
+									} else {
+										localStorage.setItem("mapsel",ind)
+										//alert(localStorage.getItem("level"))
+										window.location = "./index.html"
+									}
+								}
+							}
+						})
+						setInterval(() => {
+							try {
+								page += (paget-page)/10
+								if (Math.round(page*100) == Math.round(paget*100)) page = paget
+								canvas.style.width = Math.min(100,(100/(canvas.height/canvas.width))*(window.innerHeight/window.innerWidth))+"%"
+								ctx.setTransform(1,0,0,1,0,0)
+								ctx.clearRect(0,0,canvas.width,canvas.height)
+								ctx.fillStyle = "#777"
+								ctx.fillRect(1820,0,100,1080)
+								images.forEach((e,ee) => {
+									const height = 1080/3
+									const width = 1820/3
+									const ratio = Math.min(width/e.width,height/e.height)
+									ctx.strokeStyle = ee < mapc ? "#000" : "#AAA"
+									ctx.strokeRect(width*(ee%3),height*(Math.floor(ee/3)+page),width,height)
+									ctx.drawImage(e,(width-e.width*ratio)/2+width*(ee%3),(height-e.height*ratio)/2+height*(Math.floor(ee/3)+page),e.width*ratio,e.height*ratio)
+									ctx.fillStyle = "#0007"
+									const twidth = ctx.measureText(names[ee]).width
+									ctx.fillRect(width*((ee%3)+0.5)-twidth/2,height*(Math.floor(ee/3)+page),twidth,25)
+									ctx.fillStyle = "#FFF"
+									ctx.fillText(names[ee],width*((ee%3)+0.5),height*(Math.floor(ee/3)+page))
+									//ctx.drawImage(e.Img,e.x+(e.w-e.Img.width*ratio)/2,e.y+(e.h-e.Img.height*ratio)/2,e.Img.width*ratio,e.Img.height*ratio)
+								})
+								ctx.drawImage(uiimgs[0],1820,0,100,250)
+								ctx.drawImage(uiimgs[2],1820,490,100,100)
+								ctx.fillStyle = "#0007"
+								if (del) ctx.fillRect(1820,490,100,100)
+								ctx.setTransform(1,0,0,-1,1820,1080)
+								ctx.drawImage(uiimgs[1],0,0,100,250)
+							} catch (err) {
+								alert(err.line+": "+err.message)
+							}
+						},16)
+					} catch (err) {
+						alert(err.line+": "+err.message)
+					}
+				}).catch((e) => {alert(e.line+": "+e.message)})
+			}).catch((e) => {alert(e.line+": "+e.message)})
+		</script>
+	</body>
+</html>

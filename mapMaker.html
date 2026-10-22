@@ -1,0 +1,541 @@
+<!doctype HTML>
+<html>
+	<head>
+		<script>
+			addEventListener("error", (e) => {
+				alert(e.lineno+":"+e.colno+", "+e.message+"\nMain")
+			});
+		</script>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+		<style id="allCss">
+			body {
+				padding: 0px;
+				margin: 0px;
+				width: 100%;
+				height: 100%;
+				overflow: hidden;
+				font-family: Arial;
+			}
+			canvas {
+				-webkit-user-select: none;
+				-moz-user-select: none;
+				-ms-user-select: none;
+				user-select: none;
+				-webkit-user-drag: none;
+				touch-action: none;
+				overflow: hidden;
+				image-rendering: pixelated;
+				border: black thin solid;
+				display: inline
+			}
+			select {
+				@supports (appearance: base-select) {
+					&,
+					&::picker(select) {
+						appearance: base-select;
+					}
+				}
+			}
+		</style>
+	</head>
+	<body id="body" style="width:100%;height:100vh;">
+		<canvas style="margin:auto;background-color:#FFF;" id='canvas' width='1920' height='1080'></canvas><select size="1" style="position:absolute;margin:auto;top:25vh;z-index:-1" id="unittypes" multiple><option value="0">Light walker</option><option value="1">Heavy walker</option><option value="2">Drone</option><option value="3">Roller</option><option value="4">Chinook</option></select>
+		<p id="out"></p>
+		<script src="./definitions.js"></script>
+		<script>
+			ctx = canvas.getContext("2d")
+			ctx.webkitImageSmoothingEnabled = false
+			ctx.mozImageSmoothingEnabled = false
+			ctx.imageSmoothingEnabled = false
+			ctx.textAlign = "center"
+			ctx.textBaseline = "middle"
+			
+			let tiles = []
+			let promises = []
+			tilenames.forEach((e,ee) => {
+				tiles[ee] = new Image()
+				tiles[ee].src = "./images/tiles/"+e+".png"
+				promises.push(new Promise((resolve,reject) => {
+					tiles[ee].onload = function() {
+						resolve()
+					};
+					tiles[ee].onerror = function(e) {
+						alert(tiles[ee].src)
+						reject()
+					}
+				}))
+			})
+			
+			let finput = document.createElement('input');
+			finput.type = 'file';
+			finput.accept = ".json";
+			
+			// Source - https://stackoverflow.com/a/65939108
+			// Posted by MSOACC, modified by community. See post 'Timeline' for change history
+			// Retrieved 2026-07-17, License - CC BY-SA 4.0
+			
+			const saveTemplateAsFile = (filename, dataObjToWrite) => {
+				let jsonString = JSON.stringify(dataObjToWrite,null,"\t")
+				jsonString = jsonString.replaceAll(/\[\s*([^\[\]]+?)\s*\]/gm, (match, content) => {
+					//alert(content)
+					if (content.includes('[') || content.includes('{')) {
+						return match;
+					}
+					const singleLine = content.split(',').map(item => item.trim()).join(',');
+					return "["+singleLine+"]";
+				});
+				const blob = new Blob([jsonString], { type: "text/json" });
+				const link = document.createElement("a");
+				
+				link.download = filename;
+				link.href = window.URL.createObjectURL(blob);
+				link.dataset.downloadurl = ["text/json", link.download, link.href].join(":");
+				
+				const evt = new MouseEvent("click", {
+					view: window,
+					bubbles: true,
+					cancelable: true,
+				});
+				
+				link.dispatchEvent(evt);
+				link.remove()
+				
+				//My additions
+				mapjson = jsonString
+				document.body.insertAdjacentHTML("beforeend","<button id='fallbackCopy' style='position:fixed;left:20%;top:20vh;width:60%;height:60vh;' onclick='copySave()'>If the download failed click here<button id='closer' style='position:fixed;left:25%;top:60vh;width:50%;height:20vh;' onclick='fallbackCopy.remove();closer.remove()'>Close this window</button></button>")
+			};
+			
+			let mapjson
+			
+			function getHighestContrastFromHsl(h, s, l) {
+				s /= 100;
+				l /= 100;
+				const k = n => (n + h / 30) % 12;
+				const a = s * Math.min(l, 1 - l);
+				const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+				const r = f(0);
+				const g = f(8);
+				const b = f(4);
+				const transform = (v) => {
+					return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+				};
+				const R = transform(r);
+				const G = transform(g);
+				const B = transform(b);
+				const luminance = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+				const contrastWithWhite = (1 + 0.05) / (luminance + 0.05);
+				const contrastWithBlack = (luminance + 0.05) / (0 + 0.05);
+				return contrastWithWhite > contrastWithBlack ? "#FFF" : "#000";
+			}
+			
+			function copySave() {
+				navigator.clipboard.writeText(mapjson).then(
+					() => {
+						alert("Saved to clipboard")
+						fallbackCopy.remove();closer.remove()
+					},
+					() => {
+						alert("Copy failed\nattempting alternate solution")
+						fallbackCopy.innerHTML = mapjson
+						fallbackCopy.select();
+						document.execCommand("copy");
+					},
+				)
+			}
+			
+			let controls = {"remove":{"x":0,"y":0,"w":300,"h":50,"value":0,"bgcol":"#000","bcol":"#DDD","col":"#FFF","text":"Clear pointers","act":function(){maice = {}}},"adjSize": {"x":0,"y":50,"w":300,"h":50,"value":0,"bgcol":"#000","bcol":"#DDD","col":"#FFF","text":"Size:             "},"size1":{"x":115,"y":60,"w":85,"h":30,"value":1,"text":"1","bgcol":"#FFF","bcol":"#DDD","col":"#000","textIn":true,"change":function(change) {if (change >= 0) {ts.forEach((e) => {e.push(...Array(change).fill(0))})} else {ts.forEach((e) => {e.length += change})}},"type":"number"},"size2":{"x":205,"y":60,"w":85,"h":30,"value":1,"text":"1","bgcol":"#FFF","bcol":"#DDD","col":"#000","textIn":true,"change":function(change) {if (change >= 0) {ts.push(...Array(change).fill([]).map(t => Array(size[0]).fill(0)))} else {ts.length += change}},"type":"number"},"export":{"x":0,"y":980,"w":300,"h":100,"bgcol":"#000","col":"#FFF","bcol":"#DDD","text":"Export map","act":function() {
+				let fmap = {};
+				fmap.map = ts;
+				fmap.walls = wallts;
+				fmap.blocks = blockts;
+				if (sloct != undefined) {
+					if (sloct != undefined && psloc != undefined) {
+						slocs[sloct][psloc[0]+","+psloc[1]] = Array.from(unittypes.selectedOptions).map(o => Number(o.value))}
+					};
+					fmap.spawns = [[],[]];
+					slocs.forEach((e,ee) => {
+						for (const [key,value] of (Object.entries(e).sort((a,b) => {
+							const sa = a[0].split(",");
+							const sb = b[0].split(",");
+							const d = sa[1]-sb[1]
+							if (d != 0) return d
+							else return sa[0]-sb[0]
+						}))) {
+							if (ts[key.split(",")[1]][key.split(",")[0]] == 17+ee) {
+								fmap.spawns[ee].push(value)
+							}
+						}
+					});
+					fmap.rand = rands;
+					const name = prompt("Name of map");
+					fmap.name = name;
+					saveTemplateAsFile(name,fmap)
+				}
+			},"import":{"x":1620,"y":980,"w":300,"h":100,"bgcol":"#000","col":"#FFF","bcol":"#DDD","text":"Import map","act":function() {
+				finput.click();
+				finput.addEventListener('change', async (event) => {
+					const file = event.target.files[0]; // Get the first selected file
+					if (!file) return;
+					try {
+						const text = await file.text(); // Read file content as text
+						const data = JSON.parse(text)
+						ts = data.map ?? [[0]]
+						wallts = data.walls ?? []
+						blockts = data.blocks ?? []
+						rands = data.rand ?? [[],[]]
+						controls.size1.value = ts[0].length
+						controls.size1.text = ts[0].length.toString()
+						controls.size1.dom.value = ts[0].length
+						controls.size2.value = ts.length
+						controls.size2.text = ts.length.toString()
+						controls.size2.dom.value = ts.length
+						const controlspre = controls;
+						controls = {};
+						let s = true;
+						slocs = [{},{}]
+						let i = 0
+						let j = 0
+						ts.forEach((e,ee) => {
+							e.forEach((r,rr) => {
+								if (r == 17) {
+									slocs[0][rr+","+ee] = data.spawns[0][i]
+									i++
+								}
+								if (r == 18) {
+									slocs[1][rr+","+ee] = data.spawns[1][j]
+									j++
+								}
+							})
+						})
+						for (const [key,value] of Object.entries(controlspre)) {
+							if (key.startsWith("tileSel")) {
+								if (Number(key.slice(7)) < tiles.length) controls[key] = value
+								else sidemenuc--
+							} else {
+								if (s) {
+									s = false;
+									data.rand.forEach((e) => {
+										sidemenuc++;
+								controls["tileSel"+(sidemenuc-1)] = {
+									"x":(sidemenuc+2)%3*100,"y":Math.floor((sidemenuc+2)/3)*100+tileSelTop,"w":100,"h":100,"value":sidemenuc-1,"bgcol":"hsl("+((sidemenuc-1-tiles.length)*23)+" 100 50)","bcol":"#DDD","col":getHighestContrastFromHsl(((sidemenuc-1-tiles.length)*23), 100, 50),"text":"Random"+(sidemenuc-tiles.length-1),"act":function(){
+										if (seltile == -3) {controls.blocks.bgcol = "#000"};if (seltile == -2) {controls.walls.bgcol = "#000"};
+										if (seltile >= 0) {
+											controls["tileSel"+seltile].bcol = "#DDD"
+										};
+										controls.randBar.visible = false
+										if (seltile == this.value) {
+											seltile = -1
+										} else {
+											controls.randBar.visible = true
+											controls.randBar.text = Object.entries(rands[this.value-tiles.length]).reduce(((a,b) => a +=b[0]+": "+(b[1]*100)+"%\n"),"").slice(0,-1)
+											seltile = this.value;this.bcol = "#F00"
+										}
+									}
+								}
+									})
+								}
+								controls[key] = value
+							}
+						}
+						event.target.value = "";
+					} catch (error) {
+						alert(error.line+": "+error.message)
+					}
+				});}},"walls":{"x":300,"y":0,"w":100,"h":100,"text":"Wall","bgcol":"#000","bcol":"#DDD","col":"#FFF","act":function() {if (seltile == -3) {controls.blocks.bgcol = "#000"};if (seltile == -2) {seltile = -1;this.bgcol = "#000"} else {seltile = -2;this.bgcol = "#700"}}},"blocks":{"x":400,"y":0,"w":100,"h":100,"text":"Block fliers","bgcol":"#000","bcol":"#DDD","col":"#FFF","act":function() {if (seltile == -2) {controls.walls.bgcol = "#000"};if (seltile == -3) {seltile = -1;this.bgcol = "#000"} else {seltile = -3;this.bgcol = "#007"}}},"newrand":
+				{"x":500,"y":0,"w":200,"h":100,"text":"New random","bgcol":"#000","bcol":"#DDD","col":"#FFF","act":function() {
+					rands.push({});
+					sidemenuc++;
+					const controlspre = controls;
+					controls = {};
+					let s = true;
+					for (const [key,value] of Object.entries(controlspre)) {
+						if (key.startsWith("tileSel")) {
+							controls[key] = value
+						} else {
+							if (s) {
+								s = false;
+								//alert("hsl("+(sidemenuc-1-tiles.length)*23+", 100, 25)")
+								controls["tileSel"+(sidemenuc-1)] = {
+									"x":(sidemenuc+2)%3*100,"y":Math.floor((sidemenuc+2)/3)*100+tileSelTop,"w":100,"h":100,"value":sidemenuc-1,"bgcol":"hsl("+((sidemenuc-1-tiles.length)*23)+" 100 50)","bcol":"#DDD","col":getHighestContrastFromHsl(((sidemenuc-1-tiles.length)*23), 100, 50),"text":"Random"+(sidemenuc-tiles.length-1),"act":function(){
+										if (seltile == -3) {controls.blocks.bgcol = "#000"};if (seltile == -2) {controls.walls.bgcol = "#000"};
+										if (seltile >= 0) {
+											controls["tileSel"+seltile].bcol = "#DDD"
+										};
+										controls.randBar.visible = false
+										if (seltile == this.value) {
+											seltile = -1
+										} else {
+											controls.randBar.visible = true
+											controls.randBar.text = Object.entries(rands[this.value-tiles.length]).reduce(((a,b) => a +=b[0]+": "+(b[1]*100)+"%\n"),"").slice(0,-1)
+											seltile = this.value;this.bcol = "#F00"
+										}
+									}
+								}
+								//alert(controls["tileSel"+(sidemenuc-1)].bgcol)
+							}
+							controls[key] = value
+						}
+					}}
+				},"addrand":{"x":700,"y":0,"w":200,"h":100,"text":"Add to random","bgcol":"#000","bcol":"#DDD","col":"#FFF","act":function() {if (selrand < 0) {selrand = 1;this.bgcol = "#000"} else if (seltile >= tiles.length) {selrand = tiles.length-seltile-1;this.bgcol = "#070"}}},"reset":{"x":1820,"y":0,"w":100,"h":100,"text":"Recenter","bgcol":"#000","bcol":"#DDD","col":"#FFF","act":function() {cam.x = size[0]*16;cam.y = size[1]*16;}},"randBar":{"x":1620,"y":100,"w":300,"h":880,"bgcol":"#000","bcol":"#DDD","col":"#FFF","visible":false},"home":{"x":900,"y":0,"w":100,"h":100,"text":"Home","bgcol":"#000","bcol":"#DDD","col":"#FFF","act":function() {window.location = "./index.html"}},"rewall":{"x":1620,"y":0,"w":200,"h":100,"text":"Redo walls","bgcol":"#000","bcol":"#DDD","value":false,"col":"#FFF","act":function() {this.value = !this.value;this.bgcol = this.value ? "#777" : "#000"},"visible":false}}
+			
+			let rands = []
+			let selrand = 1
+			const spv = ("showPicker" in HTMLSelectElement.prototype)
+			
+			let sloct
+			
+			Object.values(controls).forEach((e) => {
+				if (e.img) {
+					e.Img = new Image()
+					e.Img.src = e.img
+				}
+				if (e.textIn) {
+					e.dom = document.createElement("input")
+					document.body.appendChild(e.dom)
+					e.dom.style.position = "absolute"
+					e.dom.style.top = "0px"
+					e.dom.style.left = "0px"
+					e.dom.style.zIndex = -1
+					e.dom.parent = e
+					e.dom.type = e.type
+					e.dom.oninput = function() {this.parent.text = this.value}
+					e.dom.onchange = function() {const pre = this.parent.value;this.parent.value = Number(this.value);if (this.parent.change) {this.parent.change(this.parent.value-pre)}}
+					e.dom.value = e.text
+				}
+			})
+			
+			const orth = [[0,-1],[1,0],[0,1],[-1,0]]
+			
+			let wallts = []
+			let blockts = []
+			let slocs = [{},{}]
+			let cam = {"x":0,"y":0,"z":1}
+			let tileSelTop = 0
+			let prevScale = -1
+			let maice = {}
+			let size = [1,1]
+			let ts = [[0]]
+			let tmenu = {}
+			let seltile = -1
+			let psloc
+			let sidemenuc = tiles.length
+			Promise.all(promises).then(() => {
+				tiles.forEach((e,ee) => {
+					tmenu["tileSel"+ee] = {"x":ee%3*100,"y":Math.floor(ee/3)*100+100,"w":100,"h":100,"value":ee,"bgcol":"#000","bcol":"#DDD","col":"#F00","Img":e,"act":function(){if (seltile == -3) {controls.blocks.bgcol = "#000"};if (seltile == -2) {controls.walls.bgcol = "#000"};if (seltile >= 0) {controls["tileSel"+seltile].bcol = "#DDD"};if (selrand < 0) {const p = Number(prompt("Chance (in %)"))/100;if (p) {rands[-1-selrand][this.value] = p} else {delete rands[-1-selrand][this.value]};controls.randBar.text = Object.entries(rands[seltile-tiles.length]).reduce(((a,b) => a +=b[0]+": "+(b[1]*100)+"%\n"),"").slice(0,-1)} else {controls.randBar.visible = false;if (seltile == this.value) {seltile = -1} else {seltile = this.value;this.bcol = "#F00"}}},"text":"   "+ee+"   "}
+				})
+				controls = {...tmenu,...controls}
+				canvas.addEventListener("pointerdown",function(e) {
+					prevScale = -1
+					const loc = [e.offsetX/canvas.offsetWidth*canvas.width,e.offsetY/canvas.offsetHeight*canvas.height]
+					e.loc = loc
+					e.first = [e.timeStamp,...loc]
+					maice[e.pointerId] = e
+				})
+				canvas.addEventListener("wheel",function(e) {
+					const loc = [e.offsetX/canvas.offsetWidth*canvas.width,e.offsetY/canvas.offsetHeight*canvas.height]
+					e.loc = loc
+					e.first = (maice[e.pointerId] ?? {"first":[e.timeStamp,...loc]}).first
+					const pre = cam.z
+					cam.z = Math.max(Math.min(cam.z+e.deltaY/200,25),1)
+					if (cam.z != pre) {
+						const c2 = [canvas.width/2,canvas.height/2]
+						const w = [cam.x+(loc[0]-c2[0])/pre,cam.y+(loc[1]-c2[1])/pre]
+						cam.x = w[0]-(loc[0]-c2[0])/cam.z
+						cam.y = w[1]-(loc[1]-c2[1])/cam.z
+					}
+				})
+				canvas.addEventListener("pointermove",function(e) {
+					const loc = [e.offsetX/canvas.offsetWidth*canvas.width,e.offsetY/canvas.offsetHeight*canvas.height]
+					e.loc = loc
+					e.first = (maice[e.pointerId] ?? {"first":[e.timeStamp,...loc]}).first
+					maice[e.pointerId] = e
+					if (e.pointerType != "mouse" || e.buttons == 2) {
+						if (loc[0] < 300) {
+							tileSelTop = Math.max(Math.min(tileSelTop+e.movementY/canvas.offsetHeight*canvas.height,0),-sidemenuc*100+100)
+							let i = 0
+							for (const [key,value] of Object.entries(controls)) {
+								//alert(key+", "+value)
+								if (key.slice(0,7) == "tileSel") {
+									value.y = 100+tileSelTop+Math.floor(i/3)*100
+									i++
+								}
+							}
+						} else if (Object.values(maice).length == 2 || seltile == -1) {
+							cam.x -= e.movementX/canvas.offsetWidth*canvas.width/Object.values(maice).length/cam.z
+							cam.y -= e.movementY/canvas.offsetHeight*canvas.height/Object.values(maice).length/cam.z
+						} else {
+							const wloc = [Math.floor(((loc[0]-canvas.width/2)/cam.z+cam.x)/32),Math.floor(((loc[1]-canvas.height/2)/cam.z+cam.y)/32)]
+							if (wloc[0] >= 0 && wloc[1] >= 0 && wloc[1] < ts.length && wloc[0] < ts[0].length) {
+								if (seltile >= 0) {
+									ts[wloc[1]][wloc[0]] = (seltile >= tiles.length) ? tiles.length-seltile-1 : seltile
+									if (seltile == 17 || seltile == 18) {
+										if (sloct != undefined && psloc != undefined) slocs[sloct][psloc[0]+","+psloc[1]] = Array.from(unittypes.selectedOptions).map(o => Number(o.value));
+										psloc = wloc
+										sloct = seltile-17
+										//alert(JSON.stringify(slocs))
+										if (spv) unittypes.showPicker()
+										else unittypes.focus()
+									}
+								} else if (seltile == -2) {
+									if (wallts.includes(ts[wloc[1]][wloc[0]])) wallts.splice(wallts.indexOf(ts[wloc[1]][wloc[0]]),1)
+									else wallts.push(ts[wloc[1]][wloc[0]])
+								} else if (seltile == -3) {
+									if (blockts.includes(ts[wloc[1]][wloc[0]])) blockts.splice(blockts.indexOf(ts[wloc[1]][wloc[0]]),1)
+									else blockts.push(ts[wloc[1]][wloc[0]])
+								}
+							}
+						}
+						if (Object.values(maice).length == 2) {
+							const m = Object.values(maice)
+							const dis = Math.hypot(m[0].loc[0]-m[1].loc[0],m[0].loc[1]-m[1].loc[1])
+							if (prevScale > 0) {
+								const c = [(m[0].loc[0]+m[1].loc[0])/2,(m[0].loc[1]+m[1].loc[1])/2]
+								const pre = cam.z
+								cam.z = Math.max(Math.min(cam.z*(dis/prevScale),25),1)
+								if (cam.z != pre) {
+									const c2 = [canvas.width/2,canvas.height/2]
+									const w = [cam.x+(c[0]-c2[0])/pre,cam.y+(c[1]-c2[1])/pre]
+									cam.x = w[0]-(c[0]-c2[0])/cam.z
+									cam.y = w[1]-(c[1]-c2[1])/cam.z
+								}
+								prevScale = dis
+							} else prevScale = dis
+						} else prevScale = -1
+					} else prevScale = -1
+				})
+				canvas.addEventListener("pointerup",function(e) {
+					prevScale = -1
+					const pre = (maice[e.pointerId] ?? {})
+					if (pre.first && seltile != 17 && seltile != 18) {
+						const loc = [e.offsetX/canvas.offsetWidth*canvas.width,e.offsetY/canvas.offsetHeight*canvas.height]
+						if (e.timeStamp-pre.first[0] > 1000 && Math.hypot(loc[0]-pre.first[1],loc[1]-pre.first[2]) < 4) {
+							const wloc = [Math.floor(((loc[0]-canvas.width/2)/cam.z+cam.x)/32),Math.floor(((loc[1]-canvas.height/2)/cam.z+cam.y)/32)]
+							let flood = [wloc]
+							//let sofar = JSON.stringify(flood)
+							const ttype = ts[wloc[1]][wloc[0]]
+							/*let floodfill = setInterval((tt) => {
+								if*/ while (flood.length > 0) {
+									orth.forEach((e) => {
+										const nloc = [e[0]+flood[0][0],e[1]+flood[0][1]]
+										//alert(nloc)
+										//alert((nloc[0] >= 0)+","+ (nloc[1] >=0) +","+ (nloc[0] < ts[0].length) +","+ (nloc[1] < ts.length) +","+ (tt == ts[nloc[1]][nloc[0]]))
+										if (nloc[0] >= 0 && nloc[1] >= 0 && nloc[0] < ts[0].length && nloc[1] < ts.length && ttype == ts[nloc[1]][nloc[0]]) {
+											flood.push(nloc)
+											ts[nloc[1]][nloc[0]] = (seltile >= tiles.length) ? tiles.length-seltile-1 : seltile
+										}
+									})
+									flood.splice(0,1)
+									/*sofar += "\n"+JSON.stringify(flood)
+									navigator.clipboard.writeText(sofar)*/
+								} /*else clearInterval(floodfill)
+							},0,ttype)*/
+						}
+					}
+					delete maice[e.pointerId]
+				})
+				canvas.addEventListener("pointercancel",function(e) {
+					prevScale = -1
+					delete maice[e.pointerId]
+				})
+				canvas.addEventListener("click",function(e) {
+					const loc = [e.offsetX/canvas.offsetWidth*canvas.width,e.offsetY/canvas.offsetHeight*canvas.height]
+					let i = 0
+					let push = false
+					for (let ee of Object.values(controls).toReversed()) {
+						if ((ee.visible ?? true) && loc[0] > ee.x && loc[0] < ee.x+ee.w && loc[1] > ee.y && loc[1] < ee.y+ee.h) {
+							if (ee.act) ee.act([loc[0]-ee.x,loc[1]-ee.y])
+							if (ee.textIn) ee.dom.focus()
+							push = true
+							break;
+						}
+						i++
+					}
+					if (!push) {
+						const wloc = [Math.floor(((loc[0]-canvas.width/2)/cam.z+cam.x)/32),Math.floor(((loc[1]-canvas.height/2)/cam.z+cam.y)/32)]
+						if (wloc[0] >= 0 && wloc[1] >= 0 && wloc[1] < ts.length && wloc[0] < ts[0].length) {
+							if (seltile >= 0) {
+								ts[wloc[1]][wloc[0]] = (seltile >= tiles.length) ? tiles.length-seltile-1 : seltile
+								if (seltile == 17 || seltile == 18) {
+									if (sloct != undefined && psloc != undefined) slocs[sloct][psloc[0]+","+psloc[1]] = Array.from(unittypes.selectedOptions).map(o => Number(o.value));
+									psloc = wloc
+									sloct = seltile-17
+									//alert(JSON.stringify(slocs))
+									if (spv) unittypes.showPicker()
+									else unittypes.focus()
+								}
+							} else if (seltile == -2) {
+								if (wallts.includes(ts[wloc[1]][wloc[0]])) wallts.splice(wallts.indexOf(ts[wloc[1]][wloc[0]]),1)
+								else wallts.push(ts[wloc[1]][wloc[0]])
+							} else if (seltile == -3) {
+								if (blockts.includes(ts[wloc[1]][wloc[0]])) blockts.splice(blockts.indexOf(ts[wloc[1]][wloc[0]]),1)
+								else blockts.push(ts[wloc[1]][wloc[0]])
+							}
+						}
+					}
+				})
+				setInterval(() => {
+					size = [controls.size1.value,controls.size2.value]
+					canvas.style.width = Math.min(100,(100/(canvas.height/canvas.width))*(window.innerHeight/window.innerWidth))+"%"
+					unittypes.style.left = canvas.offsetWidth/2-unittypes.offsetWidth/2+"px"
+					unittypes.style.top = canvas.offsetHeight/2-unittypes.offsetHeight/2+"px"
+					ctx.setTransform(1,0,0,1,0,0)
+					ctx.clearRect(0,0,canvas.width,canvas.height)
+					ctx.translate(canvas.width/2,canvas.height/2)
+					ctx.scale(cam.z,cam.z)
+					ctx.translate(-cam.x,-cam.y)
+					ctx.lineWidth = 2
+					ctx.strokeStyle = "#000"
+					ctx.strokeRect(0,0,size[0]*32,size[1]*32)
+					ts.forEach((e,ee) => {
+						e.forEach((r,rr) => {
+							if (r >= 0) ctx.drawImage(tiles[r],rr*32,ee*32)
+							else {
+								ctx.fillStyle = "hsl("+((-1-r)*23)+" 100 50)"
+								ctx.fillRect(rr*32,ee*32,32,32)
+								ctx.fillStyle = getHighestContrastFromHsl((-1-r)*23, 100, 50)
+								ctx.font = "100px arial"
+								const text = "Random"+(-1-r)
+								ctx.font = Math.min(100*32/ctx.measureText(text).width,32)+"px arial"
+								ctx.fillText(text,rr*32+16,ee*32+16)
+							}
+							ctx.fillStyle = "#F007"
+							if (wallts.includes(r)) ctx.fillRect(rr*32,ee*32,32,32)
+							ctx.fillStyle = "#00F7"
+							if (blockts.includes(r)) ctx.fillRect(rr*32,ee*32,32,32)
+						})
+					})
+					ctx.setTransform(1,0,0,1,0,0)
+					Object.values(controls).filter(c => c.visible ?? true).forEach((e) => {
+						ctx.fillStyle = e.bgcol
+						ctx.strokeStyle = e.bcol
+						ctx.fillRect(e.x,e.y,e.w,e.h)
+						ctx.fillStyle = e.col
+						if ((e.Img ?? {}).complete) {
+							const ratio = Math.min(e.w/e.Img.width,e.h/e.Img.height)
+							ctx.drawImage(e.Img,e.x+(e.w-e.Img.width*ratio)/2,e.y+(e.h-e.Img.height*ratio)/2,e.Img.width*ratio,e.Img.height*ratio)
+						}
+						if (e.text) {
+							ctx.font = "100px arial"
+							const sp = e.text.split("\n")
+							let w = 0
+							sp.forEach((r) => {
+								w = Math.max(w,ctx.measureText(r).width)
+							})
+							const fs = Math.min(100*e.w/w,e.h/sp.length)
+							ctx.font = fs+"px arial"
+							sp.forEach((r,rr) => {
+								ctx.fillText(r,e.x+e.w/2,e.y+e.h/2-fs*((sp.length/2)-0.5-rr))
+							})
+							/*if (e.sel != undefined) {
+								ctx.fillStyle = "#3959C1"
+								ctx.fillRect(e.x+e.w/2-ctx.measureText(e.text).width/2+ctx.measureText(e.text.slice(0,e.sel)).width,e.y,2,e.h)
+							}*/
+						}
+						ctx.strokeRect(e.x,e.y,e.w,e.h)
+					})
+				},16)
+			})
+		</script>
+	</body>
+</html>

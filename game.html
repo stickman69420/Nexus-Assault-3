@@ -1,0 +1,1832 @@
+<!doctype HTML>
+<html>
+	<head>
+		<script>
+			addEventListener("error", (e) => {
+				alert(e.lineno+":"+e.colno+", "+e.message+"\nMain")
+			});
+		</script>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+		<style id="allCss">
+			body {
+				padding: 0px;
+				margin: 0px;
+				width: 100%;
+				height: 100%;
+				overflow: hidden;
+				font-family: Arial;
+			}
+			canvas {
+				-webkit-user-select: none;
+				-moz-user-select: none;
+				-ms-user-select: none;
+				user-select: none;
+				-webkit-user-drag: none;
+				touch-action: none;
+				overflow: hidden;
+				image-rendering: pixelated;
+				border: black thin solid;
+				display: inline
+			}
+			iframe {
+				display: block;
+				border: none;
+				margin: none;
+				padding: none;
+			}..
+		</style>
+	<body id="body" style="width:100%;height:100vh;">
+		<div id="multiinit">
+			<a href="./index.html">Back to home</a><br>
+			<a href="./game.html?offline=true">Switch to offline</a><br><!--input id="cons" onchange="eval(cons.value)"-->
+			<e id="peerid">Connecting... </e><button id="cbut" onclick="copyid()" style="visibility: hidden;background-color: #00000000; border: none;"><img id="cimg" src="./images/ui/copy.png" style="height:1em;"></button><br>
+			<a id="conlink"></a><button id="cbut2" onclick="copylink()" style="visibility: hidden;background-color: #00000000; border: none;"><img id="cimg2" src="./images/ui/copy.png" style="height:1em;"></button><br>
+			<input id="inputid" placeholder="Opponent's id" onchange="connect()"></input>
+		</div>
+		<div style="width:100%;height:100%;display:flex;justify-content:center;align-items:center;" id="loadBarDiv">
+			<progress style="width:50%;" id="loadBar" max="1" value="0"></progress>
+		</div><canvas id="colCan" style="visibility:hidden;position:absolute;"></canvas>
+		<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
+		<script src="./definitions.js"></script>
+		<script>
+			if ('audioSession' in navigator) navigator.audioSession.type = 'ambient';
+			
+			// Source - https://stackoverflow.com/a/42067456
+			// Posted by Jamesfo, modified by community. See post 'Timeline' for change history
+			// Retrieved 2026-09-04, License - CC BY-SA 4.0
+			GET = location.search.substr(1).split("&").reduce((o,i)=>(u=decodeURIComponent,[k,v]=i.split("="),o[u(k)]=v&&u(v),o),{});
+			
+			const average = array => array.reduce((a, b) => a + b) / array.length;
+			
+			function snowgrave(obj) {
+				if (obj == undefined) return
+				for (const [key,value] of Object.entries(obj)) {
+					if (typeof value == "object") {
+						snowgrave(value)
+						Object.freeze(value)
+					}// else Object.freeze(value)
+				}
+				Object.freeze(obj)
+				return obj
+			}
+			
+			//alert("    |   |   |   |\n––––+––––\n | |   |   | _")
+			
+			const orth = [[0,-1],[1,0],[0,1],[-1,0]]
+			
+			async function loadJSON(url,func) {
+				const request = new Request(url);
+				const response = await fetch(request);
+				const done = await response.json()
+				func(done)
+				return(done)
+			}
+			
+			const colCanCtx = colCan.getContext("2d")
+			
+			let pid
+			let d = 0
+			let controls = {}
+			let bullets = []
+			let uid = 0
+			let enuid = 0
+			
+			/*loadJSON("./tilemaps/tilemap0.json",function(e) => {
+				//alert(JSON.stringify(e))
+				
+			})*/
+
+			const inIframe = GET.player2 //window.self !== window.top;
+			
+			/*async function recieveData(data) {
+				//out.insertAdjacentHTML("beforeend","<br>Received: "+typeof data+": "+JSON.stringify(data));
+				
+			}*/
+			
+			function getPushed(r,orth2,damaged) {
+				const loc = [r.x+orth2[0],r.y+orth2[1]]
+				let sl = myUnits.filter(u => u.x == loc[0] && u.y == loc[1]).concat(enemUnits.filter(u => u.x == loc[0] && u.y == loc[1]))
+				sl.forEach((e) => {
+					e.health -= Math.max(1-e.shield,0)
+					e.shield = Math.max(e.shield-1,0)
+					if (!damaged.some(u => u == e)) damaged.push(e)
+					if (!getPushed(e,orth2,damaged)) {
+						e.x += orth2[0]
+						e.y += orth2[1]
+					}
+				})
+				return myUnits.some(u => u.x == loc[0] && u.y == loc[1]) || enemUnits.some(u => u.x == loc[0] && u.y == loc[1]) || loc[0] < 0 || loc[1] < 0 || loc[1] >= map.length || loc[0] >= map[0].length || (!unitstats[r.type].flying && walls.some(w => w.x == loc[0] && w.y == loc[1])) || (unitstats[r.type].flying && blocks.some(w => w.x == loc[0] && w.y == loc[1]))
+			}
+			
+			globalThis.receiveData = function(data) {
+				//document.body.insertAdjacentHTML("beforeend",JSON.stringify(data)+"&emsp;")
+				if (data == "🫱") { //confirm handshake (if this player isn't connected to someone else)
+					conn.send("🤝");
+					//alert(JSON.stringify(mapData))
+					//sendData({"dataType":12,"map":mapsel,"cust":mapData})
+					allDone()
+					allDone()
+				} else if (data == "🤝") { //recieve confirmation
+					allDone()
+				} else if (data == "❌") { //recieve rejection
+					conn.close()
+				} else if (data == "🏆")  {
+					let ws = localStorage.getItem("ws") ?? 0
+					alert("you'r Win'r"+(skunlock[0].includes(1) ? "" : "\nUnlocked red Nexus Assault 2 skins")+(skunlock[0].includes(2) || !custommap ? "" : "\nUnlocked white Nexus Assault 1 skins")+(skunlock[1].includes(2) || ws != 1 ? "" : "\nUnlocked orange Nexus Assault 1 skins"))
+					if (!skunlock[1].includes(2) && ws == 1) {
+						skunlock[1].push(2)
+						localStorage.setItem("p2Skins",JSON.stringify(skunlock[1]))
+					}
+					ws++
+					localStorage.setItem("ws",ws)
+					if (!skunlock[0].includes(2) && custommap) {
+						skunlock[0].push(2)
+						localStorage.setItem("p1Skins",JSON.stringify(skunlock[0]))
+					}
+					if (!skunlock[0].includes(1)) {
+						skunlock[0].push(1)
+						localStorage.setItem("p1Skins",JSON.stringify(skunlock[0]))
+					}
+				} else if (data == "turn") {
+					const requ = [2,1,0,4]
+					if (pid == 1 && !skunlock[1].includes(4) && mapData.name == "\"Tower\"" && !(myUnits.toSorted((a,b) => {
+						const d = a.y-b.y
+						if (d != 0) return d
+						else return a.x-b.x
+					}).concat(enemUnits.toSorted((a,b) => {
+						const d = a.y-b.y
+						if (d != 0) return d
+						else return a.x-b.x
+					})).map((u,uu) => u.type==requ[uu]).includes(false))) {
+						skunlock[1].push(4)
+						localStorage.setItem("p2Skins",JSON.stringify(skunlock[1]))
+					}
+					if (turn) ksdfu = true
+					else {
+						turn = true
+						cspawns.forEach((e) => {
+							if (Math.random() < 0.5) {
+								const c = {"x":e.x,"y":e.y,"vx":Math.cos(e.dir/2*Math.PI),"vy":Math.sin(e.dir/2*Math.PI),"img":"car"+(e.dir%2 == 0 ? "hor" : "vert"),"mine":true}
+								setTimeout(() => {
+									cars.push(c)
+									sendData({"dataType":14,"car":c})
+								},Math.random()*2000)
+							}
+						})
+						myUnits.filter(u => u.moved).toSorted((a,b) => a.type-b.type).forEach((e) => {
+							if (e.shield) {
+								e.shield = 0
+								sendData({"dataType":3,"id":e.id,"key":"shield","value":0})
+							}
+							if (e.dash) {
+								e.dash.dash--
+								if (e.dash.dash == 0) {
+									let push = []
+									let damaged = []
+									let padding = 1
+									e.ox = e.x
+									e.oy = e.y
+									const orth2 = orth[e.dash.dir]
+									let bounds = {"min":{"x":Math.min(e.x,e.dash.x),"y":Math.min(e.y,e.dash.y)},"max":{"x":Math.max(e.x,e.dash.x),"y":Math.max(e.y,e.dash.y)}}
+									myUnits.forEach((r) => {
+										if (r.x <= bounds.max.x && r.x >= bounds.min.x && r.y <= bounds.max.y && r.y >= bounds.min.y) {
+											push.push(r)
+											r.health -= Math.max(1-r.shield,0)
+											r.shield = Math.max(r.shield-1,0)
+										}
+									})
+									enemUnits.forEach((r) => {
+										if (r.x <= bounds.max.x && r.x >= bounds.min.x && r.y <= bounds.max.y && r.y >= bounds.min.y) {
+											push.push(r)
+											r.health -= Math.max(2-r.shield,0)
+											r.shield = Math.max(r.shield-2,0)
+										}
+									})
+									damaged.push(...push)
+									push.sort((a,b) => orth2[0]*(b.x-a.x)+orth2[1]*(b.y-a.y))
+									push.forEach((r,rr) => {
+										let cont = true
+										while (cont) {
+											let loc = [r.x+orth2[0],r.y+orth2[1]]
+											const toad = (r == e) ? 0 : padding
+											let p
+											if ((r == e && (loc[0] > bounds.max.x || loc[0] < bounds.min.x || loc[1] > bounds.max.y || loc[1] < bounds.min.y)) || r.x > bounds.max.x+toad || r.x < bounds.min.x-toad || r.y > bounds.max.y+toad || r.y < bounds.min.y-toad || getPushed(r,orth2,damaged)) {
+												cont = false
+												//padding = 0
+											} else {
+												r.x += orth2[0]
+												r.y += orth2[1]
+											}
+										}
+									})
+									damaged.forEach((r) => {
+										const en = enemUnits.some(u => u==r)
+										sendData({"dataType":3+en/2,"id":r.id,"key":"x","value":r.x})
+										sendData({"dataType":3+en/2,"id":r.id,"key":"y","value":r.y})
+										sendData({"dataType":3+en/2,"id":r.id,"key":"health","value":r.health})
+										sendData({"dataType":3+en/2,"id":r.id,"key":"shield","value":r.shield})
+									})
+									e.start = performance.now()
+									e.dist = e.dash.dist
+									e.rot = e.dash.rot
+									/*e.x = e.dash.x
+									e.y = e.dash.y*/
+									e.moved = false
+									sendData({"dataType":1,"id":e.id,"loc":e})
+								}
+							} else e.moved = false
+						})
+					}
+				}
+				let sel2 = enemUnits.find(u => u.id == data.id)
+				let sel3 = myUnits.find(u => u.id == data.id)
+				switch (data.dataType) {
+					case 0:
+						enemUnits = JSON.parse(JSON.stringify(data.units))
+						/*enemUnits.forEach((e) => {
+							e.id = enuid
+							enuid++
+						})*/
+						break;
+					case 1:
+						if (sel2) {
+							sel2.ox = sel2.x
+							sel2.oy = sel2.y
+							sel2.start = performance.now()
+							sel2.dist = data.loc.dist
+							sel2.rot = data.loc.rot
+							sel2.x = data.loc.x
+							sel2.y = data.loc.y
+						}
+						break;
+					case 2:
+						ensel = enemUnits[data.sel]
+						break;
+					case 3:
+						if (sel2) sel2[data.key] = data.value
+						break;
+					case 3.5:
+						if (sel3) sel3[data.key] = data.value
+						break;
+					case 4:
+						enswap = data.swap
+						break;
+					case 5:
+						if (sel2) sel2[data.key] = performance.now()
+						break;
+					case 6:
+						bullets.splice(bullets.findIndex(b => b.id==data.id),1)
+						break;
+					case 7:
+						bullets.push({...data.bullet,"en":!data.bullet.en})
+						bid = data.bid
+						break;
+					case 8:
+						bid = data.bid
+						break;
+					case 9:
+						const b = bullets.findIndex(b => b.id==data.bullet.id)
+						if (b+1) {
+							bullets[b] = {...data.bullet,"en":!data.bullet.en}
+						} else {
+							bullets.push({...data.bullet,"en":!data.bullet.en})
+						}
+						break;
+					case 10:
+						explosions.push(data.exp)
+						explosions.at(-1).start = performance.now()
+						break;
+					case 11:
+						enemUnits.splice(enemUnits.findIndex(u => u.id == data.id),1)
+						des++
+						localStorage.setItem("des",des)
+						break;
+					case 12:
+						mapsel = data.map
+						if (data.cust) {
+							custommap = data.truecust
+							mapData = data.cust
+							walls = mapData.wallsLoad
+							blocks = mapData.blocksLoad
+							cmap = true
+						}
+						allDone()
+						break;
+					case 13:
+						const i = cars.findIndex(c => c.id == data.id)
+						if (i >= 0) cars.splice(i,1)
+						break;
+					case 14:
+						cars.push({...data.car,"mine":false})
+						break;
+				}
+			}
+			
+			function setupConn(con) {
+				con.on("data", function(data) {
+					receiveData(data)
+				})
+			}
+			
+			function genMenu(v,f) {
+				ctx.font = "75px arial"
+				menuBuild = {"list": v,"width":200+Math.max(...v.map(s => ctx.measureText(s.name).width)),"height":v.length*154,"onsel":f}
+				menuBuild.x = (canvas.width-menuBuild.width)/2
+				menuBuild.y = (canvas.height-menuBuild.height)/2
+				return menuBuild
+			}
+			
+			let frame = 0
+			
+			let ksdfu = false //Names are hard but it can't be that hard to figure out what it does
+			function endTurn() {
+				if (ksdfu) {
+					ksdfu = false
+					if (place) {
+						const requ = [0,4,2,1]
+						if (!skunlock[1].includes(4) && mapData.name == "\"Tower\"" && !(myUnits.toSorted((a,b) => {
+							const d = a.y-b.y
+							if (d != 0) return d
+							else return a.x-b.x
+						}).concat(enemUnits.toSorted((a,b) => {
+							const d = a.y-b.y
+							if (d != 0) return d
+							else return a.x-b.x
+						})).map((u,uu) => u.type==requ[uu]).includes(false))) {
+							skunlock[1].push(4)
+							localStorage.setItem("p2Skins",JSON.stringify(skunlock[1]))
+						}
+						place = false
+						/*conn.send*/sendData({"dataType":0,"units":myUnits})
+					}
+					myUnits.filter(u => u.moved).forEach((e) => {
+						e.moved = false
+					})
+				} else {
+					controls.swap.visible = false
+					controls.abil.visible = false
+					moveLocs = []
+					sel = undefined
+					sendData({"dataType":2,"sel":myUnits.indexOf(sel)})
+					turn = false
+					let t = true
+					if (place) {
+						place = false
+						/*conn.send*/sendData({"dataType":0,"units":myUnits})
+						//controls = []
+						if (pid == 0 && !ksdfu) {
+							t = false
+							//turn = true
+						}
+						/*if (pid == 1) queueMess.push("turn")
+						else {
+							t = false
+							conn.send
+						}*/
+					}
+					if (t) /*conn.send*/sendData("turn")
+				}
+			}
+			
+			function sendData(data) {
+				if (GET.offline) {
+					if (inIframe) window.parent.receiveData(snowgrave(JSON.parse(JSON.stringify(data))))
+					else ifr.contentWindow.receiveData(snowgrave(JSON.parse(JSON.stringify(data))))
+				} else conn.send(data)
+			}
+			
+			function genArrow(e,loc,colour,camt) {
+				const tcam = controls.scam.value && camt ? cam2 : cam
+				const adj = controls.scam.value ? 2 : 1
+				rel = [(loc.x*32+16-tcam.x)*tcam.z-(controls.scam.value ? (camt ? canvas.width/4 : -canvas.width/4) : 0),(loc.y*32+16-tcam.y)*tcam.z]
+				if (Math.abs(rel[0]) > canvas.width/2/adj || Math.abs(rel[1]) > canvas.height/2) {
+					ctx.save()
+					let res
+					if (Math.abs(rel[0])*canvas.height/2 > Math.abs(rel[1])*canvas.width/2/adj+(camt ? canvas.width/2 : 0)) {
+						res = [canvas.width/2/adj+(camt ? canvas.width/2 : 0)+Math.sign(rel[0])*canvas.width/2/adj,canvas.height/2+rel[1]*canvas.width/2/adj/Math.abs(rel[0])]
+						ctx.translate(...res)
+					} else {
+						res = [canvas.width/2/adj+(camt ? canvas.width/2 : 0)+rel[0]*canvas.height/2/Math.abs(rel[1]),canvas.height/2+Math.sign(rel[1])*canvas.height/2]
+						ctx.translate(...res)
+					}
+					ctx.rotate(Math.atan2(rel[1],rel[0])+Math.PI/2)
+					const size = Math.min(Math.max(1000/Math.hypot(rel[0]-res[0],rel[1]-res[1]),0.5),1)
+					ctx.drawImage(uiimgs[cols[colour]+"Arrow"],-40*size,0,80*size,120*size)
+					ctx.restore()
+				}
+			}
+			
+			function genMoves(sl) {
+				const voff = Math.floor(unitstats[sl.type].move.length/2)
+				unitstats[sl.type].move.forEach((e,ee) => {
+					const hoff = Math.floor(e.length/2)
+					e.forEach((r,rr) => {
+						const pos = {"x":sl.x-hoff+rr,"y":sl.y-voff+ee}
+						if (r && pos.x >= 0 && pos.y >= 0 && pos.y < map.length && pos.x < map[0].length && (sl.type == 2 || (!enemUnits.find(s => s.x == pos.x && s.y == pos.y) && !myUnits.find(s => s.x == pos.x && s.y == pos.y))) && (unitstats[sl.type].flying || !walls.find(s => s.x == pos.x && s.y == pos.y)) && (!unitstats[sl.type].flying || !blocks.find(s => s.x == pos.x && s.y == pos.y))) {
+							const dis = [pos.x-sel.x,pos.y-sel.y]
+							const amp = Math.hypot(...dis)
+							const rot = (Math.atan2(dis[1],dis[0])+Math.PI/2)%(Math.PI*2)
+							if (unitstats[sl.type].flying) {
+								const nor = [dis[0]/amp,dis[1]/amp]
+								let valid = true
+								for (let i=1;i<=amp;i++) {
+									const lc = [Math.floor(sel.x+0.5+nor[0]*i),Math.floor(sel.y+0.5+nor[1]*i)]
+									if (blocks.find(w => w.x == lc[0] && w.y == lc[1]) || (sl.type != 2 && (enemUnits.find(w => w.x == lc[0] && w.y == lc[1]) || myUnits.find(w => w.x == lc[0] && w.y == lc[1])))) valid = false
+								}
+								if (valid) moveLocs.push({...pos,"dist":amp,"rot":rot})
+							} else {
+								const nor = [dis[0]/amp,dis[1]/amp]
+								let valid = true
+								for (let i=1;i<=amp;i++) {
+									const lc = [Math.floor(sel.x+0.5+nor[0]*i),Math.floor(sel.y+0.5+nor[1]*i)]
+									if (walls.find(w => w.x == lc[0] && w.y == lc[1]) || enemUnits.find(w => w.x == lc[0] && w.y == lc[1]) || myUnits.find(w => w.x == lc[0] && w.y == lc[1])) valid = false
+								}
+								if (valid) moveLocs.push({...pos,"dist":amp,"rot":rot})
+							}
+						}
+					})
+				})
+			}
+			
+			let bid = 0
+			
+			function calcRot(wloc) {
+				myUnits.filter(u => !u.moved).forEach((e,ee) => {
+					e.toMouseRot = Math.atan2(wloc[1]/32-e.y-0.5,wloc[0]/32-e.x-0.5)
+					sendData({"dataType":3,"id":e.id,"key":"toMouseRot","value":e.toMouseRot})
+				})
+			}
+			
+			function gunRender(e,stats,top,en) {
+				if ((controls.swap.value || (en && enswap)) && stats.gtop == top) {
+					if (ensel == e || sel == e) {
+						//ctx.fillText(JSON.stringify(e),e.x*32,e.y*32)
+						ctx.save()
+						ctx.translate(e.x*32+16,e.y*32+16)
+						ctx.rotate(e.toMouseRot)
+						ctx.scale(stats.gunSize,stats.gunSize)
+						ctx.drawImage(uiimgs["firing/"+stats.fireImgs[0]],-16,-16)
+						ctx.restore()
+					} else {
+						const since = performance.now()-e.fireStart
+						if (since <= e.fireStop) {
+							ctx.save()
+							ctx.translate(e.x*32+16,e.y*32+16)
+							ctx.rotate(e.toMouseRot)
+							ctx.scale(stats.gunSize,stats.gunSize)
+							ctx.drawImage(uiimgs["firing/"+stats.fireImgs[1]],(Math.floor(since/100)%Math.floor(uiimgs["firing/"+stats.fireImgs[1]].width/32))*32,0,32,32,-16,-16,32,32)
+							ctx.restore()
+						}
+					}
+				}
+			}
+			
+			let prevScale = [-1,-1]
+			let sel
+			let ensel
+			let enswap
+			let place = true
+			let menu
+			let maice = {}
+			let turn = true
+			let swapping = false
+			let debounce
+			function start() {
+				multiinit.innerHTML = "<canvas id='canvas' width='1920' height='1080'></canvas>"
+				multiinit.style.width = "100%"
+				multiinit.style.textAlign = "center"
+				canvas.style.margin = "0px auto"
+				body.style.lineHeight = "0px"
+				ctx = canvas.getContext("2d")
+				ctx.webkitImageSmoothingEnabled = false
+				ctx.mozImageSmoothingEnabled = false
+				ctx.imageSmoothingEnabled = false
+				controls.end = {"x":1600,"y":960,"w":300,"h":100,"value":0,"bgcol":pid ? "#00F" : "#F00","bcol":"#000","col":pid ? "#0AF" : "#FA0","text":"Done","act":function(){if (spawnLocs.length == 0) {if (turn) {endTurn()}} else {alert("Place all your units first")}}}
+				controls.remove = {"x":0,"y":0,"w":300,"h":50,"value":0,"bgcol":pid ? "#00F" : "#F00","bcol":"#000","col":pid ? "#0AF" : "#FA0","text":"Clear pointers","act":function(){maice = {}}}
+				controls.bcam = {"x":1660,"y":10,"w":250,"h":50,"value":0,"bgcol":pid ? "#00F7" : "#F007","bcol":"#000","col":pid ? "#0AF" : "#FA0","text":"Bullet cam","value":false,"act":function(){this.value = !this.value;this.bgcol = (pid ? "#00F" : "#F00")+(this.value ? "F" : "7");}}
+				controls.scam = {"x":1660,"y":60,"w":250,"h":50,"value":0,"bgcol":pid ? "#00F7" : "#F007","bcol":"#000","col":pid ? "#0AF" : "#FA0","text":"Split camera","value":false,"act":function(){this.value = !this.value;this.bgcol = (pid ? "#00F" : "#F00")+(this.value ? "F" : "7");}}
+				controls.rescam = {"x":1660,"y":110,"w":250,"h":50,"value":0,"bgcol":pid ? "#00F" : "#F00","bcol":"#000","col":pid ? "#0AF" : "#FA0","text":"Reset camera","value":false,"act":function(){
+					const s = [map[0].length*32,map.length*32]
+					cam.z = Math.max(Math.min(Math.min(1920/s[0],1080/s[1]),25),1)
+					cam.x = s[0]/2
+					cam.y = s[1]/2
+					cam2.z = Math.max(Math.min(Math.min(1920/s[0],1080/s[1]),25),1)
+					cam2.x = s[0]/2
+					cam2.y = s[1]/2
+				}}
+				let img = new Image()
+				img.src = "./images/ui/swapmode.png"
+				controls.swap = {"x":1600,"y":775,"w":150,"h":150,"value":false,"bgcol":pid ? "#00F" : "#F00","bcol":"#000","col":pid ? "#0AF" : "#FA0","Img":img,"visible":false,"act":function(){this.value = !this.value;sendData({"dataType":4,"swap":this.value});moveLocs = [];if (!this.value && sel) {genMoves(sel)}}}
+				controls.abil = {"x":1750,"y":775,"w":150,"h":150,"value":false,"bgcol":pid ? "#00F" : "#F00","bcol":"#000","col":pid ? "#0AF" : "#FA0","visible":false,"act":function(){
+					let desel = true
+					switch (sel.type) {
+						case 0:
+							desel = false
+							moveLocs = []
+							orth.forEach((e,ee) => {
+								let cont = 1
+								while (cont) {
+									const pos = {"x":sel.x+e[0]*cont,"y":sel.y+e[1]*cont}
+									if (pos.x >= 0 && pos.y >= 0 && pos.y < map.length && pos.x < map[0].length && !walls.find(s => s.x == pos.x && s.y == pos.y)) {
+										moveLocs.push({...pos,"dist":cont/10,"rot":Math.PI/2*ee,"dash":Math.ceil(cont/2),"dir":ee})
+										if (enemUnits.some(s => s.x == pos.x && s.y == pos.y) || myUnits.some(s => s.x == pos.x && s.y == pos.y)) cont = false
+										else cont++
+									} else cont = false
+								}
+							})
+							break;
+						case 1:
+							sel.health = -1;
+							break;
+						case 2:
+							desel = false
+							sel = myUnits.find(u => u.type != 2 && u.x == sel.x && u.y == sel.y);
+							sendData({"dataType":2,"sel":myUnits.indexOf(sel)});
+							controls.abil.Img = uiimgs[abilNames[sel.type]]
+							moveLocs = []
+							if (!controls.swap.value) genMoves(sel)
+							break;
+						case 3:
+							sel.shield = 5
+							sendData({"dataType":3,"id":sel.id,"key":"shield","value":sel.shield})
+							break;
+						case 4:
+							swapping = true;
+							sel.swap = true;
+							break;
+					}
+					if (desel) {
+						moveLocs = [];
+						sel.moved = true;
+						sel = undefined;
+						sendData({"dataType":2,"sel":myUnits.indexOf(sel)});
+						controls.swap.visible = false;
+						controls.abil.visible = false;
+					}
+				}}
+				ctx.textAlign = "center"
+				ctx.textBaseline = "middle"
+				canvas.addEventListener("pointerdown",function(e) {
+					const loc = [e.offsetX/canvas.offsetWidth*canvas.width,e.offsetY/canvas.offsetHeight*canvas.height]
+					prevScale[+(loc[0] >= canvas.width/2 && controls.scam.value)] = -1
+					calcRot([(loc[0]-canvas.width/2)/cam.z+cam.x,(loc[1]-canvas.height/2)/cam.z+cam.y])
+					e.loc = loc
+					e.first = [e.timeStamp,...loc]
+					maice[e.pointerId] = e
+				})
+				canvas.addEventListener("wheel",function(e) {
+					const loc = [e.offsetX/canvas.offsetWidth*canvas.width,e.offsetY/canvas.offsetHeight*canvas.height]
+					let tcam = (controls.scam.value && loc[0] >= canvas.width/2) ? cam2 : cam
+					calcRot([(loc[0]-canvas.width/2)/tcam.z+tcam.x,(loc[1]-canvas.height/2)/tcam.z+tcam.y])
+					e.loc = loc
+					e.first = (maice[e.pointerId] ?? {"first":[e.timeStamp,...loc]}).first
+					const pre = tcam.z
+					tcam.z = Math.max(Math.min(tcam.z+e.deltaY/200,25),1)
+					if (tcam.z != pre) {
+						const c2 = [canvas.width/2,canvas.height/2]
+						const w = [tcam.x+(loc[0]-c2[0])/pre,tcam.y+(loc[1]-c2[1])/pre]
+						cam.x = w[0]-(loc[0]-c2[0])/tcam.z
+						cam.y = w[1]-(loc[1]-c2[1])/tcam.z
+					}
+				})
+				canvas.addEventListener("pointermove",function(e) {
+					const loc = [e.offsetX/canvas.offsetWidth*canvas.width,e.offsetY/canvas.offsetHeight*canvas.height]
+					const psind = +(loc[0] >= canvas.width/2 && controls.scam.value)
+					let tcam = (controls.scam.value && loc[0] >= canvas.width/2) ? cam2 : cam
+					calcRot([(loc[0]-canvas.width/2)/tcam.z+tcam.x,(loc[1]-canvas.height/2)/tcam.z+tcam.y])
+					e.loc = loc
+					e.first = (maice[e.pointerId] ?? {"first":[e.timeStamp,...loc]}).first
+					maice[e.pointerId] = e
+					if (e.pointerType != "mouse" || e.buttons == 2) {
+						let el = Object.values(maice).filter(m => ((!controls.scam.value) || ((m.loc[0] >= canvas.width/2) == (loc[0] >= canvas.width/2))))
+						tcam.x -= e.movementX/canvas.offsetWidth*canvas.width/el.length/tcam.z
+						tcam.y -= e.movementY/canvas.offsetHeight*canvas.height/el.length/tcam.z
+						if (el.length == 2) {
+							const m = el
+							const dis = Math.hypot(m[0].loc[0]-m[1].loc[0],m[0].loc[1]-m[1].loc[1])
+							if (prevScale[psind] > 0) {
+								const c = [(m[0].loc[0]+m[1].loc[0])/2,(m[0].loc[1]+m[1].loc[1])/2]
+								const pre = tcam.z
+								tcam.z = Math.max(Math.min(tcam.z*(dis/prevScale[psind]),25),1)
+								if (tcam.z != pre) {
+									const c2 = [canvas.width/2,canvas.height/2]
+									const w = [tcam.x+(c[0]-c2[0])/pre,tcam.y+(c[1]-c2[1])/pre]
+									tcam.x = w[0]-(c[0]-c2[0])/tcam.z
+									tcam.y = w[1]-(c[1]-c2[1])/tcam.z
+								}
+								prevScale[psind] = dis
+							} else prevScale[psind] = dis
+						} else prevScale[psind] = -1
+					} else prevScale[psind] = -1
+				})
+				canvas.addEventListener("pointerup",function(e) {
+					const loc = [e.offsetX/canvas.offsetWidth*canvas.width,e.offsetY/canvas.offsetHeight*canvas.height]
+					prevScale[+(loc[0] >= canvas.width/2 && controls.scam.value)] = -1
+					let tcam = (controls.scam.value && loc[0] >= canvas.width/2) ? cam2 : cam
+					calcRot([(loc[0]-canvas.width/2)/tcam.z+tcam.x,(loc[1]-canvas.height/2)/tcam.z+tcam.y])
+					if (maice[e.pointerId] && e.timeStamp - maice[e.pointerId].first[0] <= 500 && Math.hypot(loc[0]-maice[e.pointerId].first[1],loc[1]-maice[e.pointerId].first[2]) <= 4) {
+						const worldLoc = [(loc[0]-canvas.width/2)/tcam.z+tcam.x,(loc[1]-canvas.height/2)/tcam.z+tcam.y]
+						const mapLoc = [Math.floor(worldLoc[0]/32),Math.floor(worldLoc[1]/32)]
+						//alert(JSON.stringify(mapLoc))
+						let sl
+						if (!menu && place && (sl = spawnLocs.find(s => s.loc.x == mapLoc[0] && s.loc.y == mapLoc[1]))) {
+							menu = genMenu(sl.types.map(s => ({"out":s,"name":unitnames[s],"img":units[pid][s]})),function(ind,self) {myUnits.push({"x":mapLoc[0],"y":mapLoc[1],"type":self.list[ind].out,"moved":true,"shield":0,"health":unitstats[self.list[ind].out].health,"id":uid});uid++})
+							menu.sl = sl
+						} else if (menu && loc[0] >= menu.x && loc[0] <= menu.x+menu.width && loc[1] >= menu.y && loc[1] <= menu.y+menu.height) {
+							sl = Math.floor((loc[1]-menu.y)/154)
+							menu.onsel(sl,menu)
+							spawnLocs.splice(spawnLocs.indexOf(menu.sl),1)
+							menu = undefined
+						} else if (turn && !place && !swapping && (sl = moveLocs.find(s => s.x == mapLoc[0] && s.y == mapLoc[1]))) {
+							moveLocs = []
+							controls.swap.visible = false
+							controls.abil.visible = false
+							sel.moved = true
+							if (sl.dash) {
+								sl.max = sl.dash
+								sel.dash = sl
+							} else {
+								if (mapData.name == "\"Lake\"" && sel.type == 2 && !skunlock.includes(3)) {
+									if (sl.x > sel.x) {
+										if (sl.x == 99) {
+											sounds["ominous-worse"].cloneNode().play()
+											skunlock[0].push(4)
+											localStorage.setItem("p1Skins",JSON.stringify(skunlock[0]))
+										} else if (sl.x >= 90) sounds["ominous-hell-super"].cloneNode().play()
+										else if (sl.x >= 70) sounds["ominous-hell"].cloneNode().play()
+										else if (sl.x >= 50) sounds["ominous"].cloneNode().play()
+									}
+								}
+								sel.ox = sel.x
+								sel.oy = sel.y
+								sel.start = performance.now()
+								sel.dist = sl.dist
+								sel.rot = sl.rot
+								sel.x = sl.x
+								sel.y = sl.y
+								sendData({"dataType":1,"id":sel.id,"loc":sel})
+							}
+							//alert(myUnits.indexOf(sel)+","+JSON.stringify(sel))
+							/*conn.send*/
+							sel = undefined
+							sendData({"dataType":2,"sel":myUnits.indexOf(sel)})
+						} else if (turn && !place && swapping && !sel && (sl = (myUnits.find(s => s.x == mapLoc[0] && s.y == mapLoc[1])))) {
+							const toloc = [sl.x,sl.y]
+							const swa = myUnits.find(u => u.swap)
+							swa.swap = false
+							swapping = false
+							const off = [swa.y-sl.y,swa.x-sl.x]
+							const dist = Math.hypot(...off)
+							const rot = Math.atan2(...off)
+							
+							sl.ox = sl.x
+							sl.oy = sl.y
+							sl.start = performance.now()
+							sl.dist = dist
+							sl.rot = rot
+							sl.x = swa.x
+							sl.y = swa.y
+							sendData({"dataType":1,"id":sl.id,"loc":sl})
+							
+							swa.ox = swa.x
+							swa.oy = swa.y
+							swa.start = performance.now()
+							swa.dist = dist
+							swa.rot = rot+Math.PI/2
+							swa.x = toloc[0]
+							swa.y = toloc[1]
+							sendData({"dataType":1,"id":swa.id,"loc":swa})
+						} else if (turn && !place && !sel && !swapping && (sl = myUnits.toSorted((a,b) => {return (a.type==2 ? -1 : 1)-(b.type==2 ? -1 : 1)}).find(s => !s.moved && s.x == mapLoc[0] && s.y == mapLoc[1]))) {
+							sel = sl
+							sendData({"dataType":2,"sel":myUnits.indexOf(sel)})
+							controls.swap.visible = true
+							controls.abil.visible = true
+							controls.abil.Img = uiimgs[abilNames[sel.type]]
+							moveLocs = []
+							if (!controls.swap.value) genMoves(sl)
+						} else {
+							let push = false
+							Object.values(controls).forEach((ee,i) => {
+								if (/*(!ee.touch || e.pointerType == "touch")*/(ee.visible ?? true) && loc[0] > ee.x && loc[0] < ee.x+ee.w && loc[1] > ee.y && loc[1] < ee.y+ee.h) {
+									if (ee.act) ee.act([loc[0]-ee.x,loc[1]-ee.y])
+									push = true
+									//e.contInd = i
+								}
+							})
+							if (!push) {
+								if (sel && controls.swap.value) {
+									if (sel.x == mapLoc[0] && sel.y == mapLoc[1]) {
+										controls.swap.visible = false
+										controls.abil.visible = false
+										sel = undefined
+										sendData({"dataType":2,"sel":myUnits.indexOf(sel)})
+									} else {
+										const stats = unitstats[sel.type]
+										sel.fireStart = performance.now()
+										sel.fireStop = stats.bullet.delay*stats.bullet.count
+										const ind = myUnits.indexOf(sel)
+										sendData({"dataType":5,"id":sel.id,"key":"fireStart"})
+										sendData({"dataType":3,"id":sel.id,"key":"fireStop","value":stats.bullet.delay*stats.bullet.count})
+										for (let i=0;i<stats.bullet.count;i++) {
+											const ang = sel.toMouseRot+((Math.random()-0.5)*stats.bullet.dis)*Math.PI/180
+											setTimeout((an,par,stat) => {
+												const bullet = {"x":par.x*32+16,"y":par.y*32+16,"img":stat.bullet.img,"vx":Math.cos(an)*stat.bullet.spd,"vy":Math.sin(an)*stat.bullet.spd,"spd":stat.bullet.spd,"dmg":stat.bullet.dmg,"id":bid,"type":par.type,"parent":par}
+												bid++
+												//alert(bid+","+pid)
+												//alert(JSON.stringify(bullet))
+												bullets.push(bullet)
+												sendData({"dataType":7,"bullet":bullet,"bid":bid})
+											},stats.bullet.delay*i,ang,sel,stats)
+										}
+										controls.swap.visible = false
+										controls.abil.visible = false
+										sel.moved = true
+										sel = undefined
+										sendData({"dataType":2,"sel":myUnits.indexOf(sel)})
+									}
+								} else {
+									moveLocs = []
+									controls.swap.visible = false
+									controls.abil.visible = false
+									sel = undefined
+									sendData({"dataType":2,"sel":myUnits.indexOf(sel)})
+								}
+							}
+						}
+					}
+					delete maice[e.pointerId]
+				})
+				addEventListener("pointercancel",function(e) {
+					prevScale[+((e.offsetX/canvas.offsetWidth*canvas.width) >= canvas.width/2 && controls.scam.value)] = -1
+					delete maice[e.pointerId]
+				})
+				setInterval(() => {
+					if (GET.offline) canvas.style.width = Math.min(100,(100/(canvas.height/canvas.width))*(window.innerHeight/window.innerWidth)/(inIframe ? 1.01 : 2))+"%"
+					else canvas.style.width = Math.min(100,(100/(canvas.height/canvas.width))*(window.innerHeight/window.innerWidth))
+					if (!inIframe && GET.offline) {
+						ifr.style.height = canvas.offsetHeight+"px"
+						ifr.style.width = canvas.offsetWidth+"px"
+					}
+					ctx.setTransform(1,0,0,1,0,0)
+					ctx.clearRect(0,0,canvas.width,canvas.height)
+					//ctx.fillText(turn+","+!!pid+","+(turn != !!pid),960,540)
+					//cam.z = Math.sin(performance.now()/250)+1.1
+					ctx.translate(canvas.width/2,canvas.height/2)
+					ctx.scale(cam.z,cam.z)
+					//ctx.setTransform(cam.z,0,0,cam.z,-cam.x*cam.z,-cam.y*cam.z)
+					ctx.translate(-cam.x,-cam.y)
+					if (tmap) ctx.drawImage(tmap,0,0)
+					//out.innerHTML = ""
+					for (let i=spawnLocs.length-1;i>=0;i--) {
+						let e = spawnLocs[i]
+						if (e.types.length == 1) {
+							myUnits.push({"x":e.loc.x,"y":e.loc.y,"type":e.types[0],"moved":true,"shield":0,"health":unitstats[e.types[0]].health,"id":uid})
+							uid++
+							spawnLocs.splice(i,1)
+							//alert(JSON.stringify(myUnits)+pid)
+						} else ctx.drawImage(uiimgs.important,32*(Math.floor(performance.now()/500)%4),0,32,32,e.loc.x*32-8,e.loc.y*32-8,48,48)
+					}
+					ctx.font = "20px arial"
+					if (controls.bcam.value && bullets.length > 0) {
+						if (!camb) camb = JSON.parse(JSON.stringify(cam))
+						debounce = undefined
+						cam.x = average(bullets.map(b => b.x))
+						cam.y = average(bullets.map(b => b.y))
+					} else if (camb) {
+						if (debounce == undefined) debounce = performance.now()
+						else if (performance.now()-debounce >= 1000) {
+							cam = camb
+							camb = undefined
+							debounce = undefined
+						}
+					}
+					for (let i=bullets.length-1;i>=0;i--) {
+						let e = bullets[i]
+						const im = uiimgs["bullets/"+e.img]
+						const hoff = Math.floor(im.width/2)
+						const voff = Math.floor(im.height/2)
+						let skip
+						for (let j=0;j<e.spd;j++) {
+							e.x += e.vx/e.spd
+							e.y += e.vy/e.spd
+							if (e.x < 0 || e.y < 0 || e.x > map[0].length*32 || e.y > map.length*32 || (e.type != 2 && walls.some(w => w.x == Math.floor(e.x/32) && w.y == Math.floor(e.y/32)))) {
+								bullets.splice(i,1)
+								if (!e.en) skip = true
+							}
+							ctx.globalAlpha = (j+1)/e.spd
+							ctx.drawImage(im,e.x-hoff,e.y-voff,im.width*(j+1)/e.spd,im.height*(j+1)/e.spd);
+							(!!e.en != (e.dmg < 0) ? myUnits : enemUnits).forEach((r) => {
+								if (!skip && r != e.parent) {
+									const offset = [e.x-hoff-r.x*32,e.y-voff-r.y*32]
+									if (offset[0] > -im.width && offset[1] > -im.height && offset[0] <= 32 && offset[1] <= 32) {
+										colCan.width = im.width
+										colCan.height = im.height
+										colCanCtx.clearRect(0,0,colCan.width,colCan.height)
+										colCanCtx.drawImage(units[1-pid][r.type],-Math.floor(offset[0]),-Math.floor(offset[1]))
+										const data = colCanCtx.getImageData(0,0,im.width,im.height)
+										let coll = false
+										//alert(JSON.stringify(offset)+","+im.width+","+im.height+","+JSON.stringify(data.data))
+										for (let i=3;i<data.data.length;i+=4) {
+											if (data.data[i] > 0) {
+												coll = true
+												if (!e.en) skip = true
+												break;
+											}
+										}
+										if (coll) {
+											if (!e.en) {
+												if (e.dmg < 0) r.health = Math.min(r.health-e.dmg,unitstats[r.type].health)
+												else {
+													r.health -= Math.max(e.dmg-r.shield,0)
+													r.shield = Math.max(r.shield-e.dmg,0)
+												}
+												sendData({"dataType":6,"id":e.id})
+												sendData({"dataType":e.dmg < 0 ? 3 : 3.5,"id":r.id,"key":"health","value":r.health})
+												sendData({"dataType":e.dmg < 0 ? 3 : 3.5,"id":r.id,"key":"shield","value":r.shield})
+											}
+											bullets.splice(i,1)
+											//alert(i)
+										}
+									}
+									//if (skip) break;
+								}
+							})
+							if (skip) {
+								const exp = unitstats[e.type].bullet.explosion
+								if (exp) {
+									const exp2 = {"x":e.x-exp[0]/2,"y":e.y-exp[0]/2,"w":exp[0],"h":exp[0],"dmg":exp[1],"start":performance.now()}
+									//alert(JSON.stringify(exp2))
+									explosions.push(exp2)
+									enemUnits.forEach((t) => {
+										const bounds = {"min":{"x":t.x*32,"y":t.y*32},"max":{"x":t.x*32+32,"y":t.y*32+32}}
+										const off = [Math.max(bounds.min.x-e.x,e.x-bounds.max.x,0),Math.max(bounds.min.y-e.y,e.y-bounds.max.y,0)]
+										const dist = Math.hypot(...off)
+										if (dist <= exp[0]/2) {
+											t.health -= Math.max(exp[1]*(1-(dist/exp[0]))-t.shield,0) // not just using /dist*exp[0] for when dist is 0
+											t.shield = Math.max(t.shield-exp[1]*(1-(dist/exp[0])),0)
+											sendData({"dataType":3.5,"id":t.id,"key":"health","value":t.health})
+											sendData({"dataType":3.5,"id":t.id,"key":"shield","value":t.shield})
+										}
+									})
+									sendData({"dataType":10,"exp":exp2})
+								}
+								break;
+							}
+							if (!e.en && frame%5 == 0) sendData({"dataType":9,"bullet":e})
+						}
+					}
+					ctx.globalAlpha = 1
+					for (let i=cars.length-1;i>=0;i--) {
+						let e = cars[i]
+						e.x += e.vx
+						e.y += e.vy
+						//cars[i] = e
+						let s = false
+						if (e.x < 0 || e.y < 0 || e.x >= map[0].length || e.y >= map.length) {
+							sendData({"dataType":13,"id":e.id})
+							cars.splice(i,1)
+							continue;
+						}
+						if (walls.some(w => w.x == Math.floor(e.x) && w.y == Math.floor(e.y))) {
+							const exp = [32*3,5]
+							const exp2 = {"x":(e.x*32+16+r.x*32+16)/2-exp[0]/2,"y":(e.y*32+16+r.y*32+16)/2-exp[0]/2,"w":exp[0],"h":exp[0],"dmg":exp[1],"start":performance.now()}
+							explosions.push(exp2)
+							enemUnits.concat(myUnits).forEach((t) => {
+								const bounds = {"min":{"x":t.x*32,"y":t.y*32},"max":{"x":t.x*32+32,"y":t.y*32+32}}
+								const off = [Math.max(bounds.min.x-(e.x*32+16),(e.x*32+16)-bounds.max.x,0),Math.max(bounds.min.y-(e.y*32+16),(e.y*32+16)-bounds.max.y,0)]
+								const dist = Math.hypot(...off)
+								if (dist <= exp[0]/2) {
+									t.health -= Math.max(exp[1]*(1-(dist/exp[0]))-t.shield,0) // not just using /dist*exp[0] for when dist is 0
+									t.shield = Math.max(t.shield-exp[1]*(1-(dist/exp[0])),0)
+									const enem = enemUnits.includes(t)
+									sendData({"dataType":3+(enem/2),"id":t.id,"key":"health","value":t.health})
+									sendData({"dataType":3+(enem/2),"id":t.id,"key":"shield","value":t.shield})
+								}
+							})
+							sendData({"dataType":10,"exp":exp2})
+							sendData({"dataType":13,"id":e.id})
+							cars.splice(i,1)
+							continue;
+						}
+						ctx.drawImage(uiimgs[e.img],e.x*32,e.y*32)
+						if (e.mine) {
+							for (let j=cars.length-1;j>i;j--) {
+								let r = cars[j]
+								if (Math.abs(e.x+0.5-r.x-0.5) < 1 && Math.abs(e.y+0.5-r.y-0.5) < 1) {
+									const exp = [32*3,5]
+									const exp2 = {"x":(e.x*32+16+r.x*32+16)/2-exp[0]/2,"y":(e.y*32+16+r.y*32+16)/2-exp[0]/2,"w":exp[0],"h":exp[0],"dmg":exp[1],"start":performance.now()}
+									explosions.push(exp2)
+									enemUnits.concat(myUnits).forEach((t) => {
+										const bounds = {"min":{"x":t.x*32,"y":t.y*32},"max":{"x":t.x*32+32,"y":t.y*32+32}}
+										const off = [Math.max(bounds.min.x-(e.x*32+16),(e.x*32+16)-bounds.max.x,0),Math.max(bounds.min.y-(e.y*32+16),(e.y*32+16)-bounds.max.y,0)]
+										const dist = Math.hypot(...off)
+										if (dist <= exp[0]/2) {
+											t.health -= Math.max(exp[1]*(1-(dist/exp[0]))-t.shield,0) // not just using /dist*exp[0] for when dist is 0
+											t.shield = Math.max(t.shield-exp[1]*(1-(dist/exp[0])),0)
+											const enem = enemUnits.includes(t)
+											sendData({"dataType":3+(enem/2),"id":t.id,"key":"health","value":t.health})
+											sendData({"dataType":3+(enem/2),"id":t.id,"key":"shield","value":t.shield})
+										}
+									})
+									sendData({"dataType":10,"exp":exp2})
+									sendData({"dataType":13,"id":e.id})
+									sendData({"dataType":13,"id":r.id})
+									cars.splice(i,1)
+									cars.splice(j-/*(j > i ? 1 : 0)*/1,1)
+									s = true
+									break;
+								}
+							}
+							if (s) continue;
+							for (let r of enemUnits.concat(myUnits)) {
+								if (Math.abs(e.x+0.5-r.x-0.5) < 1 && Math.abs(e.y+0.5-r.y-0.5) < 1) {
+									r.health -= Math.max(5-r.shield,0)
+									r.shield = Math.max(r.shield-5,0)
+									const exp = [32*3,5]
+									const exp2 = {"x":(e.x*32+16+r.x*32+16)/2-exp[0]/2,"y":(e.y*32+16+r.y*32+16)/2-exp[0]/2,"w":exp[0],"h":exp[0],"dmg":exp[1],"start":performance.now()}
+									explosions.push(exp2)
+									enemUnits.concat(myUnits).forEach((t) => {
+										const bounds = {"min":{"x":t.x*32,"y":t.y*32},"max":{"x":t.x*32+32,"y":t.y*32+32}}
+										const off = [Math.max(bounds.min.x-(e.x*32+16),(e.x*32+16)-bounds.max.x,0),Math.max(bounds.min.y-(e.y*32+16),(e.y*32+16)-bounds.max.y,0)]
+										const dist = Math.hypot(...off)
+										if (dist <= exp[0]/2) {
+											t.health -= Math.max(exp[1]*(1-(dist/exp[0]))-t.shield,0) // not just using /dist*exp[0] for when dist is 0
+											t.shield = Math.max(t.shield-exp[1]*(1-(dist/exp[0])),0)
+											const enem = enemUnits.includes(t)
+											sendData({"dataType":3+(enem/2),"id":t.id,"key":"health","value":t.health})
+											sendData({"dataType":3+(enem/2),"id":t.id,"key":"shield","value":t.shield})
+										}
+									})
+									sendData({"dataType":10,"exp":exp2})
+									sendData({"dataType":13,"id":e.id})
+									cars.splice(i,1)
+									s = true
+									break;
+								}
+							}
+						}
+					}
+					myUnits.forEach((e) => {
+						//ctx.fillText(JSON.stringify(e),e.x*32,e.y*32)
+						const stats = unitstats[e.type]
+						gunRender(e,stats,false)
+						if (!e.moved && turn) ctx.drawImage(uiimgs.available,32*(Math.floor(performance.now()/100)%4),0,32,32,e.x*32,e.y*32,32,32)
+						const since = performance.now()-e.start
+						if (since <= e.dist*250*stats.spmod) {
+							const perc = since/(e.dist*250*stats.spmod)
+							const im = uiimgs["move/"+cols[pid]+skins[skin[pid]]+"/"+unitnames[e.type].toLowerCase()]
+							const frames = im.width/32
+							ctx.save()
+							ctx.translate((e.ox+(e.x-e.ox)*perc)*32+16,(e.oy+(e.y-e.oy)*perc)*32+16)
+							ctx.rotate(e.rot)
+							ctx.drawImage(im,(Math.floor(since/100)%frames)*im.height,0,im.height,im.height,-16,-16,32,32)
+							ctx.restore()
+						} else ctx.drawImage(units[pid][e.type],e.x*32,e.y*32,32,32)
+						gunRender(e,stats,true)
+						if (e.shield) ctx.drawImage(uiimgs.shielded,e.x*32,e.y*32)
+						ctx.beginPath()
+						ctx.arc(e.x*32+16,e.y*32+16,7,0,Math.PI*2)
+						ctx.strokeStyle = "#F00"
+						ctx.stroke()
+						ctx.beginPath()
+						let hrot = Math.PI*2*e.health/stats.health
+						ctx.arc(e.x*32+16,e.y*32+16,7,0,hrot)
+						ctx.strokeStyle = "#0F0"
+						ctx.stroke()
+						if (e.shield) {
+							ctx.beginPath()
+							ctx.arc(e.x*32+16,e.y*32+16,7,hrot,hrot+Math.PI*2*e.shield/stats.health)
+							ctx.strokeStyle = "#0A0"
+							ctx.stroke()
+						}
+						if (e.dash) {
+							ctx.beginPath()
+							ctx.arc(e.x*32+16,e.y*32+16,8,0,Math.PI*2*e.dash.dash/e.dash.max)
+							ctx.strokeStyle = "#FFF"
+							ctx.stroke()
+						}
+						if (e.blarg) ctx.fillText(e.blarg,e.x*32,e.y*32)
+						if (e.health <= 0) {
+							const exp = e.type == 1 ? [96,5] : [32,0]
+							const exp2 = {"x":e.x*32+16-exp[0]/2,"y":e.y*32+16-exp[0]/2,"w":exp[0],"h":exp[0],"dmg":exp[1],"start":performance.now()}
+							explosions.push(exp2)
+							enemUnits.forEach((t) => {
+								const bounds = {"min":{"x":t.x*32,"y":t.y*32},"max":{"x":t.x*32+32,"y":t.y*32+32}}
+								const off = [Math.max(bounds.min.x-(e.x*32+16),(e.x*32+16)-bounds.max.x,0),Math.max(bounds.min.y-(e.y*32+16),(e.y*32+16)-bounds.max.y,0)]
+								const dist = Math.hypot(...off)
+								if (dist <= exp[0]/2) {
+									t.health -= Math.max(exp[1]*(1-(dist/exp[0]))-t.shield,0) // not just using /dist*exp[0] for when dist is 0
+									t.shield = Math.max(t.shield-exp[1]*(1-(dist/exp[0])),0)
+									sendData({"dataType":3.5,"id":t.id,"key":"health","value":t.health})
+									sendData({"dataType":3.5,"id":t.id,"key":"shield","value":t.shield})
+								}
+							})
+							sendData({"dataType":10,"exp":exp2})
+							sendData({"dataType":11,"id":e.id})
+						}
+					})
+					let d
+					while (1+(d = myUnits.findIndex(u => u.health <= 0))) {
+						myUnits.splice(d,1)
+						/*des++
+						localStorage.setItem("des",des)*/
+						if (myUnits.length == 0) {
+							if (GET.offline) alert("P"+(1-pid+1)+" wins")
+							else {
+								sendData("🏆")
+								alert("    |   |   |   |\n––––+––––\n | |   |   | _"+(skunlock[1].includes(1) ? "" : "\nUnlocked blue Nexus Assault 2 skins")+(skunlock[0].includes(2) || !custommap ? "" : "\nUnlocked white Nexus Assault 1 skins")+"\nStreak of "+(localStorage.getItem("ws") ?? 0)+" lost")
+								localStorage.setItem("ws",0)
+								if (!skunlock[0].includes(2) && custommap) {
+									skunlock[0].push(2)
+									localStorage.setItem("p1Skins",JSON.stringify(skunlock[0]))
+								}
+								if (!skunlock[1].includes(1)) {
+									skunlock[1].push(1)
+									localStorage.setItem("p2Skins",JSON.stringify(skunlock[1]))
+								}
+							}
+						}
+					}
+					enemUnits.forEach((e) => {
+						//ctx.fillText(JSON.stringify(e),e.x*32,e.y*32)
+						const since = performance.now()-e.start
+						const stats = unitstats[e.type]
+						gunRender(e,stats,false,true)
+						if (since <= e.dist*250*stats.spmod) {
+							const perc = since/(e.dist*250*stats.spmod)
+							const im = uiimgs["move/"+cols[1-pid]+skins[skin[1-pid]]+"/"+unitnames[e.type].toLowerCase()]
+							const frames = im.width/32
+							ctx.save()
+							ctx.translate((e.ox+(e.x-e.ox)*perc)*32+16,(e.oy+(e.y-e.oy)*perc)*32+16)
+							ctx.rotate(e.rot)
+							ctx.drawImage(im,(Math.floor(since/100)%frames)*im.height,0,im.height,im.height,-16,-16,32,32)
+							ctx.restore()
+						} else ctx.drawImage(units[1-pid][e.type],e.x*32,e.y*32,32,32)
+						gunRender(e,stats,true,true)
+						if (e.shield) ctx.drawImage(uiimgs.shielded,e.x*32,e.y*32)
+						ctx.beginPath()
+						ctx.arc(e.x*32+16,e.y*32+16,7,0,Math.PI*2)
+						ctx.strokeStyle = "#F00"
+						ctx.stroke()
+						ctx.beginPath()
+						let hrot = Math.PI*2*e.health/stats.health
+						ctx.arc(e.x*32+16,e.y*32+16,7,0,hrot)
+						ctx.strokeStyle = "#FF0"
+						ctx.stroke()
+						if (e.shield) {
+							ctx.beginPath()
+							ctx.arc(e.x*32+16,e.y*32+16,7,hrot,hrot+Math.PI*2*e.shield/stats.health)
+							ctx.strokeStyle = "#0A0"
+							ctx.stroke()
+						}
+						if (e.dash) {
+							ctx.beginPath()
+							ctx.arc(e.x*32+16,e.y*32+16,8,0,Math.PI*2*e.dash.dash/e.dash.max)
+							ctx.strokeStyle = "#FFF"
+							ctx.stroke()
+						}
+					})
+					moveLocs.forEach((e) => {
+						ctx.drawImage(uiimgs["move"+pid],32*(Math.floor(performance.now()/500)%4),0,32,32,e.x*32,e.y*32,32,32)
+					})
+					for (let i=explosions.length-1;i>=0;i--) {
+						let e = explosions[i]
+						const since = performance.now()-e.start
+						if (since <= 500) ctx.drawImage(uiimgs.explosion,32*(Math.floor(since/25)),0,32,32,e.x,e.y,e.w,e.h)
+						else explosions.splice(i,1)
+					}
+					/*ctx.fillStyle = "#F007"
+					walls.forEach((e) => {
+						ctx.fillRect(e.x*32,e.y*32,32,32)
+					})
+					ctx.fillStyle = "#00F7"
+					blocks.forEach((e) => {
+						ctx.fillRect(e.x*32,e.y*32,32,32)
+					})*/
+				if (controls.scam.value) {
+					ctx.setTransform(1,0,0,1,0,0)
+					ctx.fillStyle = "#FFF"
+					ctx.fillRect(canvas.width/2,0,canvas.width/2,canvas.height)
+					ctx.save()
+					ctx.beginPath()
+					ctx.rect(canvas.width/2,0,canvas.width/2,canvas.height)
+					ctx.clip()
+					ctx.translate(canvas.width/2,canvas.height/2)
+					ctx.scale(cam2.z,cam2.z)
+					ctx.translate(-cam2.x,-cam2.y)
+					if (tmap) ctx.drawImage(tmap,0,0)
+					spawnLocs.forEach((e) => {
+						ctx.drawImage(uiimgs.important,32*(Math.floor(performance.now()/500)%4),0,32,32,e.loc.x*32-8,e.loc.y*32-8,48,48)
+					})
+					ctx.font = "20px arial"
+					bullets.forEach((e) => {
+						const im = uiimgs["bullets/"+e.img]
+						const hoff = Math.floor(im.width/2)
+						const voff = Math.floor(im.height/2)
+						for (let j=0;j<e.spd;j++) {
+							ctx.globalAlpha = (j+1)/e.spd
+							ctx.drawImage(im,e.x-hoff,e.y-voff,im.width*(j+1)/e.spd,im.height*(j+1)/e.spd);
+						}
+					})
+					ctx.globalAlpha = 1
+					cars.forEach((e) => {
+						ctx.drawImage(uiimgs[e.img],e.x*32,e.y*32)
+					})
+					myUnits.forEach((e) => {
+						const stats = unitstats[e.type]
+						gunRender(e,stats,false)
+						if (!e.moved && turn) ctx.drawImage(uiimgs.available,32*(Math.floor(performance.now()/100)%4),0,32,32,e.x*32,e.y*32,32,32)
+						const since = performance.now()-e.start
+						if (since <= e.dist*250*stats.spmod) {
+							const perc = since/(e.dist*250*stats.spmod)
+							const im = uiimgs["move/"+cols[pid]+skins[skin[pid]]+"/"+unitnames[e.type].toLowerCase()]
+							const frames = im.width/32
+							ctx.save()
+							ctx.translate((e.ox+(e.x-e.ox)*perc)*32+16,(e.oy+(e.y-e.oy)*perc)*32+16)
+							ctx.rotate(e.rot)
+							ctx.drawImage(im,(Math.floor(since/100)%frames)*im.height,0,im.height,im.height,-16,-16,32,32)
+							ctx.restore()
+						} else ctx.drawImage(units[pid][e.type],e.x*32,e.y*32,32,32)
+						gunRender(e,stats,true)
+						if (e.shield) ctx.drawImage(uiimgs.shielded,e.x*32,e.y*32)
+						ctx.beginPath()
+						ctx.arc(e.x*32+16,e.y*32+16,7,0,Math.PI*2)
+						ctx.strokeStyle = "#F00"
+						ctx.stroke()
+						ctx.beginPath()
+						let hrot = Math.PI*2*e.health/stats.health
+						ctx.arc(e.x*32+16,e.y*32+16,7,0,hrot)
+						ctx.strokeStyle = "#0F0"
+						ctx.stroke()
+						if (e.shield) {
+							ctx.beginPath()
+							ctx.arc(e.x*32+16,e.y*32+16,7,hrot,hrot+Math.PI*2*e.shield/stats.health)
+							ctx.strokeStyle = "#0A0"
+							ctx.stroke()
+						}
+						if (e.dash) {
+							ctx.beginPath()
+							ctx.arc(e.x*32+16,e.y*32+16,8,0,Math.PI*2*e.dash.dash/e.dash.max)
+							ctx.strokeStyle = "#FFF"
+							ctx.stroke()
+						}
+					})
+					enemUnits.forEach((e) => {
+						const since = performance.now()-e.start
+						const stats = unitstats[e.type]
+						gunRender(e,stats,false,true)
+						if (since <= e.dist*250*stats.spmod) {
+							const perc = since/(e.dist*250*stats.spmod)
+							const im = uiimgs["move/"+cols[1-pid]+skins[skin[1-pid]]+"/"+unitnames[e.type].toLowerCase()]
+							const frames = im.width/32
+							ctx.save()
+							ctx.translate((e.ox+(e.x-e.ox)*perc)*32+16,(e.oy+(e.y-e.oy)*perc)*32+16)
+							ctx.rotate(e.rot)
+							ctx.drawImage(im,(Math.floor(since/100)%frames)*im.height,0,im.height,im.height,-16,-16,32,32)
+							ctx.restore()
+						} else ctx.drawImage(units[1-pid][e.type],e.x*32,e.y*32,32,32)
+						gunRender(e,stats,true,true)
+						if (e.shield) ctx.drawImage(uiimgs.shielded,e.x*32,e.y*32)
+						ctx.beginPath()
+						ctx.arc(e.x*32+16,e.y*32+16,7,0,Math.PI*2)
+						ctx.strokeStyle = "#F00"
+						ctx.stroke()
+						ctx.beginPath()
+						let hrot = Math.PI*2*e.health/stats.health
+						ctx.arc(e.x*32+16,e.y*32+16,7,0,hrot)
+						ctx.strokeStyle = "#FF0"
+						ctx.stroke()
+						if (e.shield) {
+							ctx.beginPath()
+							ctx.arc(e.x*32+16,e.y*32+16,7,hrot,hrot+Math.PI*2*e.shield/stats.health)
+							ctx.strokeStyle = "#0A0"
+							ctx.stroke()
+						}
+						if (e.dash) {
+							ctx.beginPath()
+							ctx.arc(e.x*32+16,e.y*32+16,8,0,Math.PI*2*e.dash.dash/e.dash.max)
+							ctx.strokeStyle = "#FFF"
+							ctx.stroke()
+						}
+					})
+					moveLocs.forEach((e) => {
+						ctx.drawImage(uiimgs["move"+pid],32*(Math.floor(performance.now()/500)%4),0,32,32,e.x*32,e.y*32,32,32)
+					})
+					for (let i=explosions.length-1;i>=0;i--) {
+						let e = explosions[i]
+						const since = performance.now()-e.start
+						if (since <= 500) ctx.drawImage(uiimgs.explosion,32*(Math.floor(since/25)),0,32,32,e.x,e.y,e.w,e.h)
+					}
+					ctx.restore()
+				}
+					ctx.setTransform(1,0,0,1,0,0)
+					ctx.fillStyle = pid ? "00F" : "F00"
+					Object.values(maice).forEach((e) => {
+						ctx.beginPath()
+						ctx.arc(e.loc[0],e.loc[1],2.5,0,Math.PI*2)
+						ctx.fill()
+					})
+					if (controls.scam.value) {
+						ctx.fillStyle = "#000"
+						ctx.fillRect(canvas.width/2-2,0,5,canvas.height)
+					}
+					for (let i=0;i<=+controls.scam.value;i++) {
+						spawnLocs.forEach((e) => {
+							genArrow(e,e.loc,pid,i)
+						})
+						myUnits.forEach((e) => {
+							genArrow(e,e,pid,i)
+						})
+						enemUnits.forEach((e) => {
+							genArrow(e,e,1-pid,i)
+						})
+					}
+					ctx.strokeStyle = ((!!turn != !!pid) ? "#F00" : "#00F")
+					ctx.lineWidth = 5
+					ctx.strokeRect(0,0,canvas.width,canvas.height)
+					ctx.lineWidth = 1
+					controls.end.visible = turn
+					Object.values(controls).filter(c => c.visible ?? true).forEach((e) => {
+						ctx.fillStyle = e.bgcol
+						ctx.strokeStyle = e.bcol
+						ctx.fillRect(e.x,e.y,e.w,e.h)
+						ctx.strokeRect(e.x,e.y,e.w,e.h)
+						ctx.fillStyle = e.col
+						if (e.text) {
+							ctx.font = "100px arial"
+							ctx.font = Math.min(100*e.w/ctx.measureText(e.text).width,e.h)+"px arial"
+							ctx.fillText(e.text,e.x+e.w/2,e.y+e.h/2)
+						} else if ((e.Img ?? {}).complete) {
+							const ratio = Math.min(e.w/e.Img.width,e.h/e.Img.height)
+							ctx.drawImage(e.Img,e.x+(e.w-e.Img.width*ratio)/2,e.y+(e.h-e.Img.height*ratio)/2,e.Img.width*ratio,e.Img.height*ratio)
+						}
+					})
+					if (menu) {
+						ctx.font = "75px arial"
+						ctx.fillStyle = "#444"
+						ctx.fillRect(menu.x,menu.y,menu.width,menu.height)
+						ctx.strokeStyle = "#FFF"
+						ctx.fillStyle = "#FFF"
+						menu.list.forEach((e,ee) => {
+							ctx.strokeRect(menu.x+1,menu.y+1+ee*154,menu.width-2,152)
+							ctx.fillText(e.name,menu.x+menu.width/2+77,menu.y+77+ee*154)
+							ctx.drawImage(e.img,menu.x+2,menu.y+2+ee*154,150,150)
+						})
+					}
+					frame++
+				},16)
+			}
+			
+			function copyid() {
+				navigator.clipboard.writeText(peer.id)
+				cimg.src = "./images/ui/copied.png"
+				setTimeout(() => {
+					cimg.src = "./images/ui/copy.png"
+				},1000)
+			}
+			function copylink() {
+				navigator.clipboard.writeText(jalimk)
+				cimg2.src = "./images/ui/copied.png"
+				setTimeout(() => {
+					cimg2.src = "./images/ui/copy.png"
+				},1000)
+			}
+			
+			let myUnits = []
+			let enemUnits = []
+			let cars = []
+			let explosions = []
+			let peer
+			let conn
+			let jalimk
+			if (!GET.offline) {
+				peer = new Peer()
+				peer.on("open", function (id) {
+					if (GET.opid) {
+						inputid.value = GET.opid
+						connect()
+					} else {
+						peerid.innerHTML = id
+						const link = window.location.href+(window.location.href.includes("?") ? "&" : "?")+"opid="+id
+						jalimk = link
+						conlink.innerHTML = link
+						conlink.href = link
+						cbut.style.visibility = "visible"
+						cbut2.style.visibility = "visible"
+						/*if (!inIframe) {
+							body.insertAdjacentHTML("beforeend","<iframe id='ifr' src='"+link+"'></iframe>")
+							ifr.style.margin = "auto"
+						}*/
+					}
+				})
+				
+				peer.on("error",function(e) {
+					//alert(JSON.stringify(Object.getOwnPropertyNames(e)))
+					alert(e.line+": "+e.name+", "+e.message)
+				})
+				
+				peer.on("disconnect",function() {
+					peer.reconnect()
+				})
+				
+				peer.on("connection",function(dc) {
+					if (!conn) {
+						conn = dc
+						pid = 0
+						setupConn(dc)
+					} else {
+						/*conn.send*/sendData("❌");
+						conn.close()
+					}
+				})
+			} else if (inIframe) {
+				pid = 1
+				body.insertAdjacentHTML("beforeend","<p id='out'></p>")
+				allDone()
+				//allDone() // level sharing
+			} else {
+				const link = window.location.href+(window.location.href.includes("?") ? "&" : "?")+"player2=true"
+				body.insertAdjacentHTML("beforeend","<iframe id='ifr' src='"+link+"'></iframe>")
+				body.insertAdjacentHTML("beforeend","<p id='out'></p>")
+				ifr.style.margin = "auto"
+				pid = 0
+				allDone()
+				allDone() // level sharing
+			}
+			
+			function connect() {
+				if (!conn) {
+					conn = peer.connect(inputid.value);
+					conn.on("open", function () {
+						pid = 1
+						setupConn(conn)
+						/*conn.send*/sendData("🫱")
+					})
+				}
+			}
+			
+			let cam = {"x":0,"y":0,"z":1}
+			let cam2 = {"x":0,"y":0,"z":1}
+			let camb
+
+			/*let cvas
+			let pdown
+			let myData = {}
+			class Game extends netplayjs.Game {
+				static timestep = 1000 / 60;
+				static canvasSize = { width: 1920, height: 1080 };
+				constructor(canvas,players) {
+					super();
+					this.turn = 0
+					this.camera = [{"x":0,"y":0,"z":1},{"x":0,"y":0,"z":1}]
+					const ctx = canvas.getContext("2d")
+					body.style.height = ""
+					body.style.width = ""
+					canvas.style.width = inIframe ? "100%" : "50%"
+					canvas.style.height = inIframe ? "100%" : "50%"
+					canvas.style.boxShadow = ""
+					canvas.style.margin = ""
+					canvas.style.position = "sticky"
+					//canvas.style.left = "0px"
+					ctx.font = "20px Arial"
+					canvas.style.backgroundColor = "white"
+					body.style.padding = "0px"
+					//allCss.sheet.cssRules[1].style.visibility = "hidden"
+					ctx.webkitImageSmoothingEnabled = false
+					ctx.mozImageSmoothingEnabled = false
+					ctx.imageSmoothingEnabled = false
+					players.forEach((e) => {
+						if (e.isLocal && pid == undefined) pid = e.id
+					})
+					if (inIframe) pid = 1
+					
+					this.pointerDown = []
+					canvas.addEventListener("pointerdown", (e) => {
+						myData.pointerDown = true
+						pdown = e.timeStamp
+					})
+					canvas.addEventListener("pointerup", (e) => {
+						myData.pointerDown = false
+						if (e.timeStamp-pdown < 250) {
+							const unloca = this.prevPlayerInputs[pid].touches[0] ?? this.prevPlayerInputs[pid].mousePosition
+							if (unloca) {
+								const loca = [Math.floor(((unloca.x-960)/this.camera[pid].z+this.camera[pid].x)/32),Math.floor(((unloca.y-540)/this.camera[pid].z+this.camera[pid].y)/32)]
+								if (this.turn == pid) {
+									let sel
+									this["units"+pid].forEach((e,ee) => {
+										if (e.x == loca[0] && e.y == loca[1]) {
+											sel = ee
+										}
+									})
+								}
+							}
+						}
+					});
+					this.zoom = [0,0]
+					canvas.addEventListener("wheel", (e) => {
+						if (e.ctrlKey) this.zoom[pid] += e.deltaX
+						else this.zoom[pid] += e.deltaY
+					})
+					this.click = []
+					this.inputs = {}
+					this.units0 = [{"type":0,"x":0,"y":0}]
+					this.units1 = [{"type":1,"x":6,"y":6}]
+					cvas = canvas.getContext("2d")
+					this.loca0 = []
+					this.loca1 = []
+					this.data0 = {}
+					this.data1 = {}
+				}
+				serialize() {
+					let out = {}
+					out.units0 = JSON.stringify(this.units0)
+					out.units1 = JSON.stringify(this.units1)
+					return out
+				}
+				deserialize(values) {
+					this.units0 = JSON.parse(values.units0)
+					this.units1 = JSON.parse(values.units1)
+				}
+				tick(playerInputs) {
+					for (const [player, input] of playerInputs.entries()) {
+						const id = player.getID()
+						this.inputs[id] = input
+						if (!this.pointerDown[id]) this.inputs[id].mousePosition = null
+					}
+					if (pid == 1) this.units0[0].x++
+					//this["data"+pid] = myData
+					for (const [key,value] of Object.entries(dataTrans)) {
+						this[key][pid] = value
+					}
+					dataTrans = {}
+					for (const [player,inputs] of Object.entries(this.inputs)) {
+						//alert(JSON.stringify(this.prevPlayerInputs[player]))
+						if (this.prevPlayerInputs && this.prevPlayerInputs[player]) {
+							let mov
+							if (this.prevPlayerInputs[player].touches[0] && inputs.touches[0]) {
+								const tlist1 = inputs.touches
+								const tlist2 = this.prevPlayerInputs[player].touches
+								if (tlist2[1] && tlist1[1]) {
+									mov = [(tlist2[0].x+tlist2[1].x)/2-(tlist1[0].x+tlist1[1].x)/2,(tlist2[0].y+tlist2[1].y)/2-(tlist1[0].y+tlist1[1].y)/2]
+									mov[2] = (Math.hypot(tlist1[0].y-tlist1[1].y,tlist1[0].x-tlist1[1].x)-Math.hypot(tlist2[0].y-tlist2[1].y,tlist2[0].x-tlist2[1].x))/192
+								} else mov = [tlist2[0].x-tlist1[0].x,tlist2[0].y-tlist1[0].y]
+							} else if (this.prevPlayerInputs[player].mousePosition && inputs.mousePosition) {
+								mov = [this.prevPlayerInputs[player].mousePosition.x-inputs.mousePosition.x,this.prevPlayerInputs[player].mousePosition.y-inputs.mousePosition.y]
+								mov[2] = this.zoom[player]
+								this.zoom[player] = 0
+							}
+							if (mov) {
+								if (mov[2]) this.camera[player].z += mov[2]
+								this.camera[player].z = Math.max(0.1,this.camera[player].z)
+								
+								this.camera[player].x += mov[0]/this.camera[player].z
+								this.camera[player].y += mov[1]/this.camera[player].z
+							}
+						}
+					}
+					this.prevPlayerInputs = JSON.parse(JSON.stringify(this.inputs))
+				}
+				draw(canvas) {
+					const ctx = canvas.getContext("2d");
+					ctx.setTransform(1,0,0,1,0,0)
+					ctx.clearRect(0,0,canvas.width,canvas.height)
+					units.forEach((e,ee) => {
+						e.forEach((r,rr) => {
+							ctx.drawImage(r,rr*32,ee*32)
+						})
+					})
+					tiles.forEach((e,ee) => {
+						for (let i=0;i<4;i++) {
+							for (let j=0;j<4;j++) {
+								ctx.drawImage(e,ee*128+i*32,64+j*32)
+							}
+						}
+					})
+					ctx.setTransform(this.camera[pid].z,0,0,this.camera[pid].z,-this.camera[pid].x*this.camera[pid].z+canvas.width/2,-this.camera[pid].y*this.camera[pid].z+canvas.height/2)
+					if (tmap) ctx.drawImage(tmap,0,0)
+					ctx.fillText(JSON.stringify(this.prevPlayerInputs),256,256)
+					ctx.fillText(JSON.stringify(this.camera),256,276)
+					ctx.fillText(JSON.stringify(this.data0),256,296)
+					ctx.fillText(JSON.stringify(this.data1),256,316)
+					//if (this.loca.length > 0) alert(JSON.stringify(this.loca))
+					this.units0.forEach((e) => {
+						ctx.drawImage(units[0][e.type],e.x*32,e.y*32)
+					})
+					this.units1.forEach((e) => {
+						ctx.drawImage(units[1][e.type],e.x*32,e.y*32)
+					})
+				}
+			}*/
+			let tmap
+			let units = []
+			//const tilenames = ["grass","wet grass","tiles","tiles cracked","tiles wall","tiles wall cracked","tile","tile cracked","tile wall","tile wall cracked","water","redSpawn","blueSpawn"]
+			let abilNames = ["dash","explode","below","shield","swap"]
+			let extra = ["move0","move1","important","available","firing/gun","firing/doubleGun","firing/fire","firing/doubleFire","firing/wideGun","firing/wideFire","bullets/bullet","bullets/bigBullet","bullets/smallBullet","explosion","bullets/grenade","bullets/heal","redArrow","blueArrow","shielded","carvert","carhor"].concat(abilNames)
+			cols.forEach((e,ee) => {
+				unitnames.forEach((r) => {
+					extra.push("move/"+e+skins[skin[ee]]+"/"+r.toLowerCase())
+				})
+			})
+			const snames = ["ominous","ominous-worse","ominous-hell","ominous-hell-super"]
+			let sounds = {}
+			//alert("move/"+cols[0]+skins[skin[0]]+"/"+unitnames[0].toLowerCase())
+			const maxload = tilenames.length+unitnames.length*2+extra.length+snames.length
+			let loadedc = 0
+			let tiles = []
+			let uiimgs = {} // not just ui anymore but I do not care in the slightest
+			cols.forEach((e,ee) => {
+				units[ee] = []
+				unitnames.forEach((r) => {
+					units[ee].push(new Image())
+					units[ee].at(-1).src = "./images/"+e+skins[skin[ee]]+"/"+r.toLowerCase()+".png"
+					units[ee].at(-1).onload = imageLoaded
+				})
+			})
+			const audioErrors = ["MEDIA_ERR_ABORTED","MEDIA_ERR_NETWORK","MEDIA_ERR_DECODE","MEDIA_ERR_SRC_NOT_SUPPORTED","MEDIA_ERR_ENCRYPTED"]
+			snames.forEach((e,ee) => {
+				sounds[e] = new Audio("./sounds/"+e+".mp3")
+				//sounds[e].onload = imageLoaded
+				sounds[e].addEventListener('canplaythrough', () => {
+					imageLoaded()
+				})
+				sounds[e].addEventListener("error", (r) => {
+					console.log(e+".mp3 had an error ("+audioErrors[r.currentTarget.error.code-1]+")")
+				});
+			})
+			tilenames.forEach((e) => {
+				tiles.push(new Image())
+				tiles.at(-1).src = "./images/tiles/"+e+".png"
+				tiles.at(-1).onload = imageLoaded
+			})
+			extra.forEach((e) => {
+				uiimgs[e] = new Image()
+				uiimgs[e].src = "./images/ui/"+e+".png"
+				uiimgs[e].onload = imageLoaded
+			})
+			function imageLoaded() {
+				loadedc++
+				loadBar.value = loadedc/maxload
+				if (loadedc == maxload) imagesLoaded()
+			}
+			function imagesLoaded() {
+				loadBarDiv.remove()
+				tmap = new Image()
+				allDone()
+			}
+			async function allDone() {
+				try {
+					d++
+					//if (d == 2 && pid == 0) 
+					if (d == 3) {
+						/*let i = 0
+						for (const [key,value] of Object.entries(sounds)) {
+							setTimeout(() => {
+								value.play().catch((err) => {alert(err.message)})
+							},i*2000)
+							i++
+						}*/
+						if (cmap) {
+							tmap.src = loadTileMap(mapData)
+							if (pid == 0) {
+								custommap = true
+								sendData({"dataType":12,"map":mapsel,"cust":mapData,"truecust":true})
+							}
+							await tmap.decode()
+							start()
+						} else {
+							loadJSON("./tilemaps/tilemap"+mapsel+".json",async function (e) {
+								try {
+									mapData = JSON.parse(JSON.stringify(e))
+									tmap.src = loadTileMap(mapData)
+									if (pid == 0) sendData({"dataType":12,"map":mapsel,"cust":mapData,"truecust":false})
+									await tmap.decode()
+									start()
+								} catch (err) {
+									alert(pid+" – "+err.line+", "+err.column+": "+err.message)
+								}
+							})
+						}
+					}
+				} catch (err) {
+					/*let ac = ""
+					for (const key of Object.getOwnPropertyNames(err)) {
+						ac += (key+": "+err[key])+"\n"
+					}
+					alert(ac)*/
+					alert(pid+" – "+err.line+", "+err.column+": "+err.message)
+				}
+			}
+			
+			let custommap = false
+			let mapsel = localStorage.getItem("mapsel") ?? 0
+			let mapData
+			//let pMapData
+			let cmap = false
+			if (mapsel >= mapc) {
+				mapData = JSON.parse(localStorage.getItem("map"+(JSON.parse(localStorage.getItem("maps"))[mapsel-mapc])))
+				cmap = true
+			}
+			
+			const unitstats = [
+				{
+					"move": [
+						[true,true,true],
+						[true,false,true],
+						[true,true,true]
+					],
+					"spmod": 1,
+					"gtop": true,
+					"fireImgs": ["gun","fire"],
+					"gunSize": 2,
+					"health": 10,
+					"bullet": {
+						"img": "bullet",
+						"spd": 10,
+						"dmg": 2,
+						"count": 1,
+						"dis": 0,
+						"delay": 400
+					}
+				},
+				{
+					"move": [
+						[true],
+						[true,false,true],
+						[true]
+					],
+					"spmod": 1.5,
+					"gtop": true,
+					"fireImgs": ["doubleGun","doubleFire"],
+					"gunSize": 1.5,
+					"health": 15,
+					"bullet": {
+						"img": "smallBullet",
+						"spd": 10,
+						"dmg": 1,
+						"count": 5,
+						"dis": 10,
+						"delay": 200
+					}
+				},
+				{
+					"move": [
+						[true,true,true,true,true],
+						[true,false,true,false,true],
+						[true,true,false,true,true],
+						[true,false,true,false,true],
+						[true,true,true,true,true]
+					],
+					"flying": true,
+					"spmod": 0.5,
+					"gtop": false,
+					"fireImgs": ["gun","fire"],
+					"gunSize": 1,
+					"health": 5,
+					"bullet": {
+						"img": "smallBullet",
+						"spd": 10,
+						"dmg": 0.5,
+						"count": 2,
+						"dis": 5,
+						"delay": 400
+					}
+				},
+				{
+					"move": [
+						[true],
+						[true],
+						[true],
+						[true],
+						[true,true,true,true,false,true,true,true,true],
+						[true],
+						[true],
+						[true],
+						[true]
+					],
+					"spmod": 0.25,
+					"gtop": true,
+					"fireImgs": ["wideGun","wideFire"],
+					"gunSize": 1,
+					"health": 5,
+					"bullet": {
+						"img": "grenade",
+						"spd": 5,
+						"dmg": 1,
+						"count": 1,
+						"dis": 20,
+						"delay": 400,
+						"explosion": [48,2]
+					}
+				},
+				{
+					"move": [
+						[true,false,false,false,false,false,false,false,true],
+						[true,false,false,false,false,false,true],
+						[true,false,false,false,true],
+						[true,false,true],
+						[false],
+						[true,false,true],
+						[true,false,false,false,true],
+						[true,false,false,false,false,false,true],
+						[true,false,false,false,false,false,false,false,true]
+					],
+					"flying": true,
+					"spmod": 0.5,
+					"gtop": false,
+					"fireImgs": ["wideGun","wideFire"],
+					"gunSize": 1,
+					"health": 10,
+					"bullet": {
+						"img": "heal",
+						"spd": 3,
+						"dmg": -5,
+						"count": 1,
+						"dis": 0,
+						"delay": 400
+					}
+				}
+			]
+			
+			let cspawns = []
+			let spawnLocs = []
+			let moveLocs = []
+			let walls = []
+			let blocks = []
+			let map
+			function loadTileMap(data) {
+try {
+				//let pMapData = JSON.stringify()
+				let sind = 0
+				map = data.map
+				const tc = document.createElement("canvas")
+				tc.width = map[0].length*32
+				tc.height = map.length*32
+				const ct = tc.getContext("2d")
+				data.walls = data.walls ?? []
+				data.blocks = data.blocks ?? []
+				data.recalcRand = data.recalcRand ?? []
+				map	.forEach((e,ee) => {
+					e.forEach((r,rr) => {
+						if (pid == 0 && (r >= 0 || !data.recalcRand[-1-r])) {
+							if (data.walls.includes(r)) walls.push({"x":rr,"y":ee})
+							if (data.blocks.includes(r)) blocks.push({"x":rr,"y":ee})
+						}
+						if (r < 0) {
+							const pr = r
+							e[rr] = Number(weightedRand(data.rand[-1-r]))
+							r = e[rr]
+							if (data.recalcRand[-1-pr] && pid == 0) {
+								if (data.walls.includes(r)) walls.push({"x":rr,"y":ee})
+								if (data.blocks.includes(r)) blocks.push({"x":rr,"y":ee})
+							}
+						}
+						ct.drawImage(tiles[r],rr*32,ee*32)
+						if (r == pid+17) {
+							spawnLocs.push({"loc":{"x":rr,"y":ee},"types":data.spawns[pid][sind]})
+							sind++
+						}
+						let p
+						switch (r) {
+							case 38:
+								p = 1
+							case 39:
+								p = p ?? 3
+							case 40:
+								p = p ?? 0
+							case 41:
+								p = p ?? 2
+								cspawns.push({"x":rr,"y":ee,"dir":p})
+								break;
+						}
+					})
+				})
+				//alert(JSON.stringify(map))
+				data.wallsLoad = walls
+				data.blocksLoad = blocks
+				const out = tc.toDataURL()
+				cam.z = Math.max(Math.min(Math.min(1920/tc.width,1080/tc.height),25),1)
+				cam.x = tc.width/2
+				cam.y = tc.height/2
+				cam2.z = Math.max(Math.min(Math.min(1920/tc.width,1080/tc.height),25),1)
+				cam2.x = tc.width/2
+				cam2.y = tc.height/2
+				tc.remove()
+				//alert(JSON.stringify(spawnLocs)+(pid+17))
+				return out
+} catch (err) {
+	alert(pid+" – "+err.line+": "+err.message)
+}
+			}
+			/*let lookint
+			if (!inIframe) lookint = setInterval(() => {
+				if (document.querySelectorAll("a").length == 2) {
+					body.insertAdjacentHTML("beforeend","<iframe style='width:50%;' id='ifr' src='"+document.querySelectorAll("a")[0].href+"'></iframe>")
+					ifr.style.height = document.querySelectorAll("canvas")[0].offsetHeight*0.75+"px"
+					ifr.parent = ""
+					clearInterval(lookint)
+				}
+			},100)*/
+		</script>
+	</body>
+</html>
