@@ -1545,15 +1545,25 @@
 			})
 			const audioErrors = ["MEDIA_ERR_ABORTED","MEDIA_ERR_NETWORK","MEDIA_ERR_DECODE","MEDIA_ERR_SRC_NOT_SUPPORTED","MEDIA_ERR_ENCRYPTED"]
 			snames.forEach((e,ee) => {
-				sounds[e] = new Audio("./sounds/"+e+".mp3")
-				//sounds[e].onload = imageLoaded
-				sounds[e].addEventListener('canplaythrough', () => {
-					imageLoaded()
-				})
-				sounds[e].onerror = imageLoaded
-				sounds[e].addEventListener("error", (r) => {
-					console.log(e+".mp3 had an error ("+audioErrors[r.currentTarget.error.code-1]+")")
-				});
+				const xhr = new XMLHttpRequest();
+				xhr.open('HEAD', "./sounds/"+e+".mp3", true);
+				xhr.send()
+				xhr.onreadystatechange = function () {
+					if (xhr.readyState === 4) { // Request finished
+						if (xhr.status === 403) {
+							imageLoaded()
+						} else {
+							sounds[e] = new Audio("./sounds/"+e+".mp3")
+							//sounds[e].onload = imageLoaded
+							sounds[e].addEventListener('canplaythrough', () => {
+								imageLoaded()
+							})
+							sounds[e].addEventListener("error", (r) => {
+								console.log(e+".mp3 had an error ("+audioErrors[r.currentTarget.error.code-1]+")")
+							});
+						}
+					}
+				}
 			})
 			tilenames.forEach((e) => {
 				tiles.push(new Image())
