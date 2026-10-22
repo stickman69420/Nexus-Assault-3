@@ -1550,6 +1550,7 @@
 				sounds[e].addEventListener('canplaythrough', () => {
 					imageLoaded()
 				})
+				sounds[e].onerror = imageLoaded
 				sounds[e].addEventListener("error", (r) => {
 					console.log(e+".mp3 had an error ("+audioErrors[r.currentTarget.error.code-1]+")")
 				});
