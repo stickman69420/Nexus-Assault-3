@@ -1531,7 +1531,7 @@
 			const snames = ["ominous","ominous-worse","ominous-hell","ominous-hell-super"]
 			let sounds = {}
 			//alert("move/"+cols[0]+skins[skin[0]]+"/"+unitnames[0].toLowerCase())
-			const maxload = tilenames.length+unitnames.length*2+extra.length+snames.length
+			const maxload = tilenames.length+unitnames.length*2+extra.length//+snames.length
 			let loadedc = 0
 			let tiles = []
 			let uiimgs = {} // not just ui anymore but I do not care in the slightest
@@ -1545,25 +1545,14 @@
 			})
 			const audioErrors = ["MEDIA_ERR_ABORTED","MEDIA_ERR_NETWORK","MEDIA_ERR_DECODE","MEDIA_ERR_SRC_NOT_SUPPORTED","MEDIA_ERR_ENCRYPTED"]
 			snames.forEach((e,ee) => {
-				const xhr = new XMLHttpRequest();
-				xhr.open('HEAD', "./sounds/"+e+".mp3", true);
-				xhr.send()
-				xhr.onreadystatechange = function () {
-					if (xhr.readyState === 4) { // Request finished
-						if (xhr.status === 403) {
-							imageLoaded()
-						} else {
-							sounds[e] = new Audio("./sounds/"+e+".mp3")
-							//sounds[e].onload = imageLoaded
-							sounds[e].addEventListener('canplaythrough', () => {
-								imageLoaded()
-							})
-							sounds[e].addEventListener("error", (r) => {
-								console.log(e+".mp3 had an error ("+audioErrors[r.currentTarget.error.code-1]+")")
-							});
-						}
-					}
-				}
+				sounds[e] = new Audio("./sounds/"+e+".mp3")
+				//sounds[e].onload = imageLoaded
+				/*sounds[e].addEventListener('canplaythrough', () => {
+					imageLoaded()
+				})*/ //Not necessary for the game, most of the time won't even try to play, and can so etimes be blocked so the sounds are no longer waited for
+				sounds[e].addEventListener("error", (r) => {
+					console.log(e+".mp3 had an error ("+audioErrors[r.currentTarget.error.code-1]+")")
+				});
 			})
 			tilenames.forEach((e) => {
 				tiles.push(new Image())
