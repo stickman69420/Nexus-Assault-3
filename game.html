@@ -43,6 +43,7 @@
 			<e id="peerid">Connecting... </e><button id="cbut" onclick="copyid()" style="visibility: hidden;background-color: #00000000; border: none;"><img id="cimg" src="./images/ui/copy.png" style="height:1em;"></button><br>
 			<a id="conlink"></a><button id="cbut2" onclick="copylink()" style="visibility: hidden;background-color: #00000000; border: none;"><img id="cimg2" src="./images/ui/copy.png" style="height:1em;"></button><br>
 			<input id="inputid" placeholder="Opponent's id" onchange="connect()"></input>
+			<div id="loadlist"></div>
 		</div>
 		<div style="width:100%;height:100%;display:flex;justify-content:center;align-items:center;" id="loadBarDiv">
 			<progress style="width:50%;" id="loadBar" max="1" value="0"></progress>
@@ -1535,21 +1536,27 @@
 			let loadedc = 0
 			let tiles = []
 			let uiimgs = {} // not just ui anymore but I do not care in the slightest
+			let loadList = []
 			cols.forEach((e,ee) => {
 				units[ee] = []
 				unitnames.forEach((r) => {
 					units[ee].push(new Image())
 					units[ee].at(-1).src = "./images/"+e+skins[skin[ee]]+"/"+r.toLowerCase()+".png"
-					units[ee].at(-1).onload = imageLoaded
+					units[ee].at(-1).onload = function() {
+						imageLoaded("unit image: "+e+" "+r)
+					}
+					loadList.push("unit image: "+e+" "+r)
 				})
 			})
 			const audioErrors = ["MEDIA_ERR_ABORTED","MEDIA_ERR_NETWORK","MEDIA_ERR_DECODE","MEDIA_ERR_SRC_NOT_SUPPORTED","MEDIA_ERR_ENCRYPTED"]
 			snames.forEach((e,ee) => {
 				sounds[e] = new Audio("./sounds/"+e+".mp3")
+				loadList.push("sound: "+e)
 				//sounds[e].onload = imageLoaded
-				/*sounds[e].addEventListener('canplaythrough', () => {
-					imageLoaded()
-				})*/ //Not necessary for the game, most of the time won't even try to play, and can so etimes be blocked so the sounds are no longer waited for
+				sounds[e].addEventListener('canplaythrough', () => {
+					loadList.splice(loadList.indexOf("sound: "+e),1)
+					loadlist.innerHTML = loadList.reduce((a,b) => a+b+"<br>","")
+				})
 				sounds[e].addEventListener("error", (r) => {
 					console.log(e+".mp3 had an error ("+audioErrors[r.currentTarget.error.code-1]+")")
 				});
@@ -1557,16 +1564,24 @@
 			tilenames.forEach((e) => {
 				tiles.push(new Image())
 				tiles.at(-1).src = "./images/tiles/"+e+".png"
-				tiles.at(-1).onload = imageLoaded
+				tiles.at(-1).onload = function() {
+					imageLoaded("tile image: "+e)
+				}
+				loadList.push("tile image: "+e)
 			})
 			extra.forEach((e) => {
 				uiimgs[e] = new Image()
 				uiimgs[e].src = "./images/ui/"+e+".png"
-				uiimgs[e].onload = imageLoaded
+				uiimgs[e].onload = function() {
+					imageLoaded("other image: "+e)
+				}
+				loadList.push("other image: "+e)
 			})
-			function imageLoaded() {
+			function imageLoaded(lln) {
 				loadedc++
 				loadBar.value = loadedc/maxload
+				loadList.splice(loadList.indexOf(lln),1)
+				loadlist.innerHTML = loadList.reduce((a,b) => a+b+"<br>","")
 				if (loadedc == maxload) imagesLoaded()
 			}
 			function imagesLoaded() {
