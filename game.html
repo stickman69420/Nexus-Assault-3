@@ -120,6 +120,10 @@
 				return myUnits.some(u => u.x == loc[0] && u.y == loc[1]) || enemUnits.some(u => u.x == loc[0] && u.y == loc[1]) || loc[0] < 0 || loc[1] < 0 || loc[1] >= map.length || loc[0] >= map[0].length || (!unitstats[r.type].flying && walls.some(w => w.x == loc[0] && w.y == loc[1])) || (unitstats[r.type].flying && blocks.some(w => w.x == loc[0] && w.y == loc[1]))
 			}
 			
+			globalThis.donePrepare = function(data) {
+				allDone()
+			}
+			
 			globalThis.receiveData = function(data) {
 				//document.body.insertAdjacentHTML("beforeend",JSON.stringify(data)+"&emsp;")
 				if (data == "🫱") { //confirm handshake (if this player isn't connected to someone else)
@@ -1352,7 +1356,6 @@
 				body.insertAdjacentHTML("beforeend","<p id='out'></p>")
 				ifr.style.margin = "auto"
 				pid = 0
-				allDone()
 				allDone() // level sharing
 			}
 			
@@ -1556,7 +1559,7 @@
 				//sounds[e].onload = imageLoaded
 				sounds[e].addEventListener('canplaythrough', () => {
 					loadList.splice(loadList.indexOf("sound: "+e),1)
-					if (ul) loadlist.innerHTML = loadList.reduce((a,b) => a+b+"<br>","")
+					if (ul) loadlist.innerHTML = loadList.length > 0 ? "Loading: "+loadList.reduce((a,b) => a+b+"<br>","") : ""
 				})
 				sounds[e].addEventListener("error", (r) => {
 					console.log(e+".mp3 had an error ("+audioErrors[r.currentTarget.error.code-1]+")")
@@ -1582,11 +1585,10 @@
 				loadedc++
 				loadBar.value = loadedc/maxload
 				loadList.splice(loadList.indexOf(lln),1)
-				loadlist.innerHTML = loadList.reduce((a,b) => a+b+"<br>","")
+				loadlist.innerHTML = loadList.length > 0 ? "Loading: "+loadList.reduce((a,b) => a+b+"<br>","") : ""
 				if (loadedc == maxload) imagesLoaded()
 			}
 			function imagesLoaded() {
-				ul = false
 				loadBarDiv.remove()
 				tmap = new Image()
 				allDone()
@@ -1603,6 +1605,7 @@
 							},i*2000)
 							i++
 						}*/
+						ul = false
 						if (cmap) {
 							tmap.src = loadTileMap(mapData)
 							if (pid == 0) {
@@ -1844,6 +1847,10 @@ try {
 					clearInterval(lookint)
 				}
 			},100)*/
+			
+			if (inIframe) {
+				window.parent.donePrepare()
+			}
 		</script>
 	</body>
 </html>
