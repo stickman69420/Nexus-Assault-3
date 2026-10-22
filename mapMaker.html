@@ -168,6 +168,7 @@
 						}
 					});
 					fmap.rand = rands;
+					fmap.recalcRand = redos;
 					const name = prompt("Name of map");
 					fmap.name = name;
 					saveTemplateAsFile(name,fmap)
@@ -183,7 +184,8 @@
 						ts = data.map ?? [[0]]
 						wallts = data.walls ?? []
 						blockts = data.blocks ?? []
-						rands = data.rand ?? [[],[]]
+						rands = data.rand ?? []
+						redos = data.recalcRand ?? []
 						controls.size1.value = ts[0].length
 						controls.size1.text = ts[0].length.toString()
 						controls.size1.dom.value = ts[0].length
@@ -229,6 +231,9 @@
 										} else {
 											controls.randBar.visible = true
 											controls.randBar.text = Object.entries(rands[this.value-tiles.length]).reduce(((a,b) => a +=b[0]+": "+(b[1]*100)+"%\n"),"").slice(0,-1)
+											controls.rewall.visible = true
+											controls.rewall.value = redos[this.value-tiles.length]
+											controls.rewall.bgcol = controls.rewall.value ? "#777" : "#000"
 											seltile = this.value;this.bcol = "#F00"
 										}
 									}
@@ -245,6 +250,7 @@
 				});}},"walls":{"x":300,"y":0,"w":100,"h":100,"text":"Wall","bgcol":"#000","bcol":"#DDD","col":"#FFF","act":function() {if (seltile == -3) {controls.blocks.bgcol = "#000"};if (seltile == -2) {seltile = -1;this.bgcol = "#000"} else {seltile = -2;this.bgcol = "#700"}}},"blocks":{"x":400,"y":0,"w":100,"h":100,"text":"Block fliers","bgcol":"#000","bcol":"#DDD","col":"#FFF","act":function() {if (seltile == -2) {controls.walls.bgcol = "#000"};if (seltile == -3) {seltile = -1;this.bgcol = "#000"} else {seltile = -3;this.bgcol = "#007"}}},"newrand":
 				{"x":500,"y":0,"w":200,"h":100,"text":"New random","bgcol":"#000","bcol":"#DDD","col":"#FFF","act":function() {
 					rands.push({});
+					redos.push(false)
 					sidemenuc++;
 					const controlspre = controls;
 					controls = {};
@@ -268,6 +274,9 @@
 										} else {
 											controls.randBar.visible = true
 											controls.randBar.text = Object.entries(rands[this.value-tiles.length]).reduce(((a,b) => a +=b[0]+": "+(b[1]*100)+"%\n"),"").slice(0,-1)
+											controls.rewall.visible = true
+											controls.rewall.value = redos[this.value-tiles.length]
+											controls.rewall.bgcol = controls.rewall.value ? "#777" : "#000"
 											seltile = this.value;this.bcol = "#F00"
 										}
 									}
@@ -277,8 +286,9 @@
 							controls[key] = value
 						}
 					}}
-				},"addrand":{"x":700,"y":0,"w":200,"h":100,"text":"Add to random","bgcol":"#000","bcol":"#DDD","col":"#FFF","act":function() {if (selrand < 0) {selrand = 1;this.bgcol = "#000"} else if (seltile >= tiles.length) {selrand = tiles.length-seltile-1;this.bgcol = "#070"}}},"reset":{"x":1820,"y":0,"w":100,"h":100,"text":"Recenter","bgcol":"#000","bcol":"#DDD","col":"#FFF","act":function() {cam.x = size[0]*16;cam.y = size[1]*16;}},"randBar":{"x":1620,"y":100,"w":300,"h":880,"bgcol":"#000","bcol":"#DDD","col":"#FFF","visible":false},"home":{"x":900,"y":0,"w":100,"h":100,"text":"Home","bgcol":"#000","bcol":"#DDD","col":"#FFF","act":function() {window.location = "./index.html"}},"rewall":{"x":1620,"y":0,"w":200,"h":100,"text":"Redo walls","bgcol":"#000","bcol":"#DDD","value":false,"col":"#FFF","act":function() {this.value = !this.value;this.bgcol = this.value ? "#777" : "#000"},"visible":false}}
+				},"addrand":{"x":700,"y":0,"w":200,"h":100,"text":"Add to random","bgcol":"#000","bcol":"#DDD","col":"#FFF","act":function() {if (selrand < 0) {selrand = 1;this.bgcol = "#000"} else if (seltile >= tiles.length) {selrand = tiles.length-seltile-1;this.bgcol = "#070"}}},"reset":{"x":1820,"y":0,"w":100,"h":100,"text":"Recenter","bgcol":"#000","bcol":"#DDD","col":"#FFF","act":function() {cam.x = size[0]*16;cam.y = size[1]*16;}},"randBar":{"x":1620,"y":100,"w":300,"h":880,"bgcol":"#000","bcol":"#DDD","col":"#FFF","visible":false},"home":{"x":900,"y":0,"w":100,"h":100,"text":"Home","bgcol":"#000","bcol":"#DDD","col":"#FFF","act":function() {window.location = "./index.html"}},"rewall":{"x":1620,"y":0,"w":200,"h":100,"text":"Redo walls","bgcol":"#000","bcol":"#DDD","value":false,"col":"#FFF","act":function() {this.value = !this.value;this.bgcol = this.value ? "#777" : "#000";redos[seltile-tiles.length]=this.value},"visible":false}}
 			
+			let redos = []
 			let rands = []
 			let selrand = 1
 			const spv = ("showPicker" in HTMLSelectElement.prototype)
