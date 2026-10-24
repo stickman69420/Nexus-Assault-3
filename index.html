@@ -25,7 +25,7 @@
 				display: inline
 			}
 			img {
-				rendering: pixelated;
+				image-rendering: pixelated;
 				width: 33%;
 			}
 			svg {
@@ -39,6 +39,7 @@
 	<body id="body" style="width:100%;height:100vh;">
 		<a href="./game.html">Play online</a><br>
 		<a href="./game.html?offline=true">Play offline</a><br>
+		<a href="./help.html">Help</a><br>
 		<a href="./mapSelect.html">Map select</a><br>
 		<a href="./mapMaker.html">Map maker</a><br>
 		<button style="display:block;" onclick="getFile.click()">Upload map</button>
@@ -97,7 +98,7 @@
 				}
 			}
 			
-			const achs = ["Win your first online match","Lose your first online match","Play a match with a custom map","Get a winstreak of 2","Destroy 10 units","Destroy 20 units","<button id='omibut' onclick='ominous.cloneNode().play()'>&nbsp;</button>","Put them where they belong"]
+			const achs = ["Win your first online match","Lose your first online match","Play a match with a custom map","Get a winstreak of 2","Destroy 10 units","Destroy 20 units","<button id='omibut' onclick='ominous.cloneNode().play()'>&nbsp;</button>","Put them where they belong","Win an online match without losing any units","Win an online match after losing all but 1 unit"]
 			const ominous = new Audio("./sounds/ominous.mp3")
 			let acac = ["",""]
 			achs.forEach((e,ee) => {

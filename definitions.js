@@ -2,7 +2,7 @@ const mapc = 21
 const tilenames = ["grass","grass2","grass3","wet grass","tiles","tiles cracked","tiles cracked2","tiles wall","tiles wall cracked2","tiles wall cracked","tile","tile cracked","tile cracked2","tile wall","tile wall cracked","tile wall cracked2","water","redSpawn","blueSpawn","hedge","table","chair","computer","computer2","rgbcomputer","rgbcomputer2","monitor","monitor2","tile dark","tile dark cracked","tile dark cracked2","tiles dark","tiles dark cracked","tiles dark cracked2","sink","price tag","vertroad","horroad","downcarspawn","upcarspawn","rightcarspawn","leftcarspawn","yellow hedge","dirt","rer","orng","yeller","greer","renn","can","lue","lu","ourple","genta","ink","redpurple dmnds","dornge wisps","noise1","noise2","noise3","noise4","noise5"]
 const unitnames = ["Light walker","Heavy walker","Drone","Roller","Chinook"]
 const cols = ["red","blue"]
-const skins = ["","/NA2","/NA","/SWORD","/pmem"]
+const skins = ["","/NA2","/NA","/SWORD","/pmem","/invert"]
 const skin = [Number(localStorage.getItem("p1Skin") ?? 0),Number(localStorage.getItem("p2Skin") ?? 0)]
 const skunlock = [JSON.parse(localStorage.getItem("p1Skins") ?? "[0]"),JSON.parse(localStorage.getItem("p2Skins") ?? "[0]")]
 

@@ -1,0 +1,63 @@
+<!doctype HTML>
+<html>
+	<head>
+		<script>
+			addEventListener("error", (e) => {
+				alert(e.lineno+":"+e.colno+", "+e.message+"\nMain")
+			});
+		</script>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+		<style id="allCss">
+			body {
+				padding: 0px;
+				margin: 0px;
+				width: 100%;
+				height: 100%;
+				/*overflow: hidden;*/
+				font-family: Arial;
+				background-color: #DDD;
+			}
+			canvas {
+				overflow: hidden;
+				image-rendering: pixelated;
+				border: black thin solid;
+				display: inline
+			}
+			img {
+				image-rendering: pixelated;
+				width: 5%;
+			}
+		</style>
+	<body id="body" style="width:100%;height:100vh;">
+		<a href="./index.html">Back to home</a><br>
+		<div id="swapdiv"></div>
+		<div id="helpdiv"></div>
+		<script src="./definitions.js"></script>
+		<script>
+			function but(tex,w,s) {
+				const fs = parseFloat(window.getComputedStyle(helpdiv).fontSize)
+				return "<e style='vertical-align: middle;display:inline-block;width:"+(w*2*fs)+"px;height:"+(2*fs)+"px;font-size:"+(s ?? 2)+"em;background-color:#F00;border: thin solid black;color: #FA0;text-align: center;overflow: hidden;overflow-wrap: break-word;'>"+tex+"</e><e style='vertical-align: middle;display:inline-block;width:"+(w*2*fs)+"px;height:"+(2*fs)+"px;font-size:"+(s ?? 2)+"em;background-color:#00F;border: thin solid black;color: #0AF;text-align: center;overflow: hidden;overflow-wrap: break-word;'>"+tex+"</e>"
+			}
+			function head(tex) {
+				return "<strong style='font-size:1.5em;'>"+tex+"</strong>"
+			}
+			const descs = ["10 health<br>Moves to surrounding tiles<br>Fires a 2 damage bullet with unlimited precision<br>Can dash orthagonally any distance after charging up for a number of turns equal to half the distance when you activate the ability<br>Deals damage to any units in the way and knocks them back up to 2 tiles from the end of the dash<br>Also deals damage when units get knocked into each other","15 health<br>Moves to adjacent tiles<br>Fires 5 bullets with 1 damage and 10° of inaccuracy on either side<br>Explodes in a 3x3 dealing 3 damage on death or when you activate the ability","5 health<br>Moves in a 5x5 except for 1 tile diagonally<br>Fires 2 bullets with 0.5 damage and 5° of inaccuracy on either side<br>Can go on the same tile as other units. Press the ability button to select the unit below it","5 health<br>Moves up to 4 tiles orthagonally<br>Fires a 1 damage grenade with a 2 damage 1.5x1.5 explosion with 20° of inaccuracy<br>Press the ability button to activate a 5 health shield","10 health<br>Moves up to 4 tiles diagonally<br>Fires a bullet that heals your units 5 health with unlimited precision<br>Press the ability button and select a friendly unit to swap with it"]
+			const ht = ["Units","Controls","Turn 0"]
+			let helps = ["",head("When it's your turn (outline of the screen is the same colour as your controls)")+"<br><img src='./images/help/avail.gif'/><br>This animation will play underneath units that you can still use on this turn<br>Click on the unit to select it<br><br><img src='./images/ui/swap.png'/><br>Press this button to swap between shooting and moving mode<br><br><img src='./images/help/exunit.jpg'/><br>All units have their health represented by the circle around the center, with green for health, yellow for enemy health, and red for lost health<br>The roller can also have dark green for shield health and the light walker can have a larger white ring to show how much longer it needs to charge up a dash<br><br><img src='./images/help/bluve.gif'/><img src='./images/help/ruve.gif'/><br>These animations show where a unit can move when it has been selected<br>Click on one of these to move there<br>Click anywhere else to delesect the unit<br><br><img src='./images/ui/firing/gun.png'/><img src='./images/ui/firing/doubleGun.png'/><img src='./images/ui/firing/wideGun.png'/><br>These gun sprites will show above or below a selected unit when in firing mode<br>Click anywhere except the unit itself to fire towards your mouse<br><br>"+but("Done",3)+"<br>The done button will end you turn<br><br>"+head("These controls can be used at any time")+"<br>"+but("Reset camera",5,1.60653)+but("Split camera",5,1.79934)+but("Bullet cam",5)+"<br>The reset camera button will move and zoom the camera to fit the whole map like how it starts<br>The split camera button will split the screen in half and make each half controlled independently (or join the two halves together when pressed again)<br>The bullet cam button when turned on will cause the camera center to follow the average position of all the bullets on screen (only left camera if split)<br><br>"+but("Clear pointers",5,1.6064)+"<br>This button will make the game forget where your mouse/fingers are, in case it glitches or it doesn't register a finger being lifted","When the game starts it will be turn 0<br>This is the turn for spawning your units and reviewing the map<br><br><img src='./images/tiles/redSpawn.png'/><img src='./images/tiles/blueSpawn.png'/><br>These tiles can spawn units for you and your opponent<br><br><img src='./images/help/canspawn.gif'/><br>This animation shows the tiles you can spawn your units on<br><br>"+but("Done",3)+"<br>Pressing the end turn button will send all your selections to your opponent<br>Once both players have pressed their end turn button turn 1 will start with player 1 going first"]
+			unitnames.forEach((r,rr) => {
+				cols.forEach((t) => {
+					skins.	forEach((e,ee) => {
+						helps[0] += "<img src='./images/"+t+e+"/"+r.toLowerCase()+".png'/>"
+					})
+					helps[0] += "&emsp;".repeat(5)
+				})
+				helps[0] += "<br>"+head(r)+"<br>"+descs[rr]+"<br><br>"
+			})
+			//helpdiv.innerHTML = helps[0]
+			ht.forEach((e,ee) => {
+				swapdiv.insertAdjacentHTML("beforeend","<button onclick='helpdiv.innerHTML=helps["+ee+"]'>"+e+"</button>")
+			})
+		</script>
+	</body>
+</html>

@@ -39,7 +39,7 @@
 	<body id="body" style="width:100%;height:100vh;">
 		<div id="multiinit">
 			<a href="./index.html">Back to home</a><br>
-			<a href="./game.html?offline=true">Switch to offline</a><br><!--input id="cons" onchange="eval(cons.value)"-->
+			<a href="./game.html?offline=true">Switch to offline</a><br><!--button onclick="host()">Host a server yourself if you're having connection troubles</button><input style="width:50%" id="hdet" onchange="joinHost()" placeholder="Paste custom server details here"></input><br--><!--input id="cons" onchange="eval(cons.value)"-->
 			<e id="peerid">Connecting... </e><button id="cbut" onclick="copyid()" style="visibility: hidden;background-color: #00000000; border: none;"><img id="cimg" src="./images/ui/copy.png" style="height:1em;"></button><br>
 			<a id="conlink"></a><button id="cbut2" onclick="copylink()" style="visibility: hidden;background-color: #00000000; border: none;"><img id="cimg2" src="./images/ui/copy.png" style="height:1em;"></button><br>
 			<input id="inputid" placeholder="Opponent's id" onchange="connect()"></input>
@@ -71,6 +71,56 @@
 				Object.freeze(obj)
 				return obj
 			}
+			
+			/*async function joinHost() {
+				const ip = await decryptIP(JSON.parse(atob(hdet.value)))
+				peer.destroy()
+				peer = new Peer({"host":ip,"port":9000})
+			}
+			
+			async function decryptIP(encryptedData) {
+				const ciphertext = Uint8Array.from(
+					atob(encryptedData.ciphertext),
+					c => c.charCodeAt(0)
+				);
+				const iv = Uint8Array.from(
+					atob(encryptedData.iv),
+					c => c.charCodeAt(0)
+				);
+				const rawKey = Uint8Array.from(
+					atob(encryptedData.key),
+					c => c.charCodeAt(0)
+				);
+				const key = await crypto.subtle.importKey("raw",rawKey,{ name: "AES-GCM" },false,["decrypt"]);
+				const decryptedBuffer = await crypto.subtle.decrypt({name: "AES-GCM",iv: iv},key,ciphertext);
+				return new TextDecoder().decode(decryptedBuffer);
+			}
+			
+			let server
+			async function host() {
+				//server = PeerServer();
+				const en = await getEncryptIP()
+				//alert(JSON.stringify(en))
+				navigator.clipboard.writeText(btoa(JSON.stringify(en)))
+				alert("Details copied to your clipboard. They include an encrypted version of your IP so only share with people you trust")
+			}
+			
+			async function getEncryptIP() {
+				const ipResponse = await fetch("https://api.ipify.org?format=json");
+				const ipData = await ipResponse.json();
+				const ipAddress = ipData.ip;
+				//alert(ipAddress)
+				const key = await window.crypto.subtle.generateKey({ "name": "AES-GCM", "length": 256 },true,["encrypt", "decrypt"]);
+				const iv = window.crypto.getRandomValues(new Uint8Array(12));
+				const encodedIP = new TextEncoder().encode(ipAddress);
+				const encryptedBuffer = await window.crypto.subtle.encrypt({ "name": "AES-GCM", "iv": iv },key,encodedIP);
+				const encryptedBytes = new Uint8Array(encryptedBuffer);
+				const base64Ciphertext = btoa(String.fromCharCode(...encryptedBytes));
+				const base64Iv = btoa(String.fromCharCode(...iv));
+				const rawKey = await crypto.subtle.exportKey("raw", key);
+				const base64Key = btoa(String.fromCharCode(...new Uint8Array(rawKey)));
+				return {"ciphertext": base64Ciphertext,"iv": base64Iv,"key": base64Key};
+			}*/
 			
 			//alert("    |   |   |   |\n––––+––––\n | |   |   | _")
 			
@@ -138,7 +188,15 @@
 					conn.close()
 				} else if (data == "🏆")  {
 					let ws = localStorage.getItem("ws") ?? 0
-					alert("you'r Win'r"+(skunlock[0].includes(1) ? "" : "\nUnlocked red Nexus Assault 2 skins")+(skunlock[0].includes(2) || !custommap ? "" : "\nUnlocked white Nexus Assault 1 skins")+(skunlock[1].includes(2) || ws != 1 ? "" : "\nUnlocked orange Nexus Assault 1 skins"))
+					alert("you'r Win'r"+(skunlock[0].includes(1) ? "" : "\nUnlocked red Nexus Assault 2 skins")+(skunlock[0].includes(2) || !custommap ? "" : "\nUnlocked white Nexus Assault 1 skins")+(skunlock[1].includes(2) || ws != 1 ? "" : "\nUnlocked orange Nexus Assault 1 skins")+(skunlock[0].includes(5) || uc != myUnits.length ? "" : "\nUnlocked inverted red skins")+(skunlock[1].includes(5) || myUnits.length != 1 ? "" : "\nUnlocked inverted blue skins"))
+					if (!skunlock[1].includes(5) && myUnits.length == 1) {
+						skunlock[1].push(5)
+						localStorage.setItem("p2Skins",JSON.stringify(skunlock[1]))
+					}
+					if (!skunlock[0].includes(5) && uc == myUnits.length) {
+						skunlock[0].push(5)
+						localStorage.setItem("p1Skins",JSON.stringify(skunlock[0]))
+					}
 					if (!skunlock[1].includes(2) && ws == 1) {
 						skunlock[1].push(2)
 						localStorage.setItem("p2Skins",JSON.stringify(skunlock[1]))
@@ -331,6 +389,12 @@
 			function setupConn(con) {
 				con.on("data", function(data) {
 					receiveData(data)
+				})
+				con.on("error", function(err) {
+					alert(err.line+": "+err.name+", "+err.message)
+				})
+				con.on("close", function() {
+					alert("Connection terminated")
 				})
 			}
 			
@@ -636,7 +700,7 @@
 						//alert(JSON.stringify(mapLoc))
 						let sl
 						if (!menu && place && (sl = spawnLocs.find(s => s.loc.x == mapLoc[0] && s.loc.y == mapLoc[1]))) {
-							menu = genMenu(sl.types.map(s => ({"out":s,"name":unitnames[s],"img":units[pid][s]})),function(ind,self) {myUnits.push({"x":mapLoc[0],"y":mapLoc[1],"type":self.list[ind].out,"moved":true,"shield":0,"health":unitstats[self.list[ind].out].health,"id":uid});uid++})
+							menu = genMenu(sl.types.map(s => ({"out":s,"name":unitnames[s],"img":units[pid][s]})),function(ind,self) {myUnits.push({"x":mapLoc[0],"y":mapLoc[1],"type":self.list[ind].out,"moved":true,"shield":0,"health":unitstats[self.list[ind].out].health,"id":uid});uid++;uc++})
 							menu.sl = sl
 						} else if (menu && loc[0] >= menu.x && loc[0] <= menu.x+menu.width && loc[1] >= menu.y && loc[1] <= menu.y+menu.height) {
 							sl = Math.floor((loc[1]-menu.y)/154)
@@ -766,9 +830,14 @@
 					prevScale[+((e.offsetX/canvas.offsetWidth*canvas.width) >= canvas.width/2 && controls.scam.value)] = -1
 					delete maice[e.pointerId]
 				})
+				if (!GET.offline) {
+					setInterval(() => {
+						sendData("🫀") //might help connections to linger longer when in the background
+					},1000)
+				}
 				setInterval(() => {
 					if (GET.offline) canvas.style.width = Math.min(100,(100/(canvas.height/canvas.width))*(window.innerHeight/window.innerWidth)/(inIframe ? 1.01 : 2))+"%"
-					else canvas.style.width = Math.min(100,(100/(canvas.height/canvas.width))*(window.innerHeight/window.innerWidth))
+					else canvas.style.width = Math.min(100,(100/(canvas.height/canvas.width))*(window.innerHeight/window.innerWidth))+"%"
 					if (!inIframe && GET.offline) {
 						ifr.style.height = canvas.offsetHeight+"px"
 						ifr.style.width = canvas.offsetWidth+"px"
@@ -788,6 +857,7 @@
 						if (e.types.length == 1) {
 							myUnits.push({"x":e.loc.x,"y":e.loc.y,"type":e.types[0],"moved":true,"shield":0,"health":unitstats[e.types[0]].health,"id":uid})
 							uid++
+							uc++
 							spawnLocs.splice(i,1)
 							//alert(JSON.stringify(myUnits)+pid)
 						} else ctx.drawImage(uiimgs.important,32*(Math.floor(performance.now()/500)%4),0,32,32,e.loc.x*32-8,e.loc.y*32-8,48,48)
@@ -1332,6 +1402,7 @@
 				})
 				
 				peer.on("disconnect",function() {
+					alert("Attempting to reconnect to server")
 					peer.reconnect()
 				})
 				
@@ -1558,8 +1629,9 @@
 				loadList.push("sound: "+e)
 				//sounds[e].onload = imageLoaded
 				sounds[e].addEventListener('canplaythrough', () => {
+					//doesn't trigger imageloaded anymore since the sound isn't necessary and most of the time you won't even hear it so it's okay if it fails to load
 					loadList.splice(loadList.indexOf("sound: "+e),1)
-					if (ul) loadlist.innerHTML = loadList.length > 0 ? "Loading: "+loadList.reduce((a,b) => a+b+"<br>","") : ""
+					if (ul) loadlist.innerHTML = loadList.length > 0 ? "Loading:<br>"+loadList.reduce((a,b) => a+b+"<br>","") : ""
 				})
 				sounds[e].addEventListener("error", (r) => {
 					console.log(e+".mp3 had an error ("+audioErrors[r.currentTarget.error.code-1]+")")
@@ -1585,7 +1657,7 @@
 				loadedc++
 				loadBar.value = loadedc/maxload
 				loadList.splice(loadList.indexOf(lln),1)
-				loadlist.innerHTML = loadList.length > 0 ? "Loading: "+loadList.reduce((a,b) => a+b+"<br>","") : ""
+				loadlist.innerHTML = loadList.length > 0 ? "Loading:<br>"+loadList.reduce((a,b) => a+b+"<br>","") : ""
 				if (loadedc == maxload) imagesLoaded()
 			}
 			function imagesLoaded() {
@@ -1770,6 +1842,7 @@
 			
 			let cspawns = []
 			let spawnLocs = []
+			let uc = 0
 			let moveLocs = []
 			let walls = []
 			let blocks = []
